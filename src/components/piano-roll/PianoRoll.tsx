@@ -247,8 +247,9 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                const startInBeats = note.time / (midi.header.ppq / (bpm / 60)); // Correct conversion
-                const durationInBeats = note.duration / (midi.header.ppq / (bpm / 60)); // Correct conversion
+                // Correctly convert ticks to beats
+                const startInBeats = midi.header.ticksToSeconds(note.ticks) * (bpm / 60);
+                const durationInBeats = midi.header.ticksToSeconds(note.durationTicks) * (bpm / 60);
 
                 newNotes.push({
                     id: nextId.current++,
@@ -393,6 +394,7 @@ export function PianoRoll() {
                 <ScrollArea
                   className="flex-grow overflow-auto"
                   style={{ height: 'calc(100vh - 14rem)' }}
+                  viewportRef={useRef<HTMLDivElement>(null)}
                 >
                   <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
                   <Grid
@@ -440,5 +442,3 @@ export function PianoRoll() {
     </div>
   );
 }
-
-    
