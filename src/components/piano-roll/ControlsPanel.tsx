@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sparkles, Trash2, Youtube } from 'lucide-react';
 import { Input } from '../ui/input';
+import { cn } from '@/lib/utils';
 
 interface ControlsPanelProps {
   beats: number;
@@ -23,7 +24,7 @@ interface ControlsPanelProps {
   selectedNote: Note | undefined;
   onRemoveNote: (id: number) => void;
   onUpdateNote: (id: number, patch: Partial<Note>) => void;
-  onGenerateMelody: (prompt: string, useExample: boolean, chordProgression?: string) => Promise<void>;
+  onGenerateMelody: (prompt: string, useExample: boolean, chordProgression?: string, youtubeUrl?: string) => Promise<void>;
   isGenerating: boolean;
   chordProgressions: string[];
 }
@@ -46,9 +47,8 @@ export function ControlsPanel({
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt || isGenerating) return;
-    // TODO: Pass youtubeUrl to the generation logic
-    await onGenerateMelody(prompt, useExample, selectedChordProgression);
+    if (isGenerating || (!prompt && !youtubeUrl)) return;
+    await onGenerateMelody(prompt, useExample, selectedChordProgression, youtubeUrl);
   };
 
   return (
@@ -77,7 +77,7 @@ export function ControlsPanel({
         <Card>
           <CardHeader>
             <CardTitle>Zaznaczona nuta</CardTitle>
-            <CardDescription>{indexToNote(selectedNote.pitch)} @ Takt {Math.floor(selectedNote.start)}</CardDescription>
+            <CardDescription>{indexToNote(selectedNote.pitch as number)} @ Takt {Math.floor(selectedNote.start)}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="space-y-2">
@@ -130,7 +130,7 @@ export function ControlsPanel({
             </div>
              <div className="space-y-2">
               <Label>Progresja Akordów</Label>
-              <Select onValueChange={setSelectedChordProgression} value={selectedChordProgression}>
+              <Select onValueChange={setSelectedChordProgression} value={selectedChordProgression} disabled={!!youtubeUrl}>
                 <SelectTrigger>
                   <SelectValue placeholder="Wybierz progresję..." />
                 </SelectTrigger>
@@ -142,8 +142,8 @@ export function ControlsPanel({
               </Select>
             </div>
             <div className="flex items-center space-x-2">
-                <Switch id="use-example-mode" checked={useExample} onCheckedChange={setUseExample} />
-                <Label htmlFor="use-example-mode">Użyj istniejącej melodii jako przykładu</Label>
+                <Switch id="use-example-mode" checked={useExample} onCheckedChange={setUseExample} disabled={!!youtubeUrl} />
+                <Label htmlFor="use-example-mode" className={cn(!!youtubeUrl && "text-muted-foreground")}>Użyj istniejącej melodii jako przykładu</Label>
             </div>
           </CardContent>
           <CardFooter>

@@ -1,28 +1,19 @@
+
 'use server';
 /**
  * @fileOverview Chord progression suggestion flow.
  *
  * - suggestChordProgressions - A function that suggests chord progressions for a given key.
- * - SuggestChordProgressionsInput - The input type for the suggestChordProgressions function.
- * - SuggestChordProgressionsOutput - The return type for the suggestChordProgressions function.
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { 
+    SuggestChordProgressionsInputSchema, 
+    SuggestChordProgressionsOutputSchema, 
+    type SuggestChordProgressionsInput, 
+    type SuggestChordProgressionsOutput 
+} from '@/lib/schemas';
 
-const SuggestChordProgressionsInputSchema = z.object({
-  key: z.string().describe('The key to suggest chord progressions for (e.g., C major, A minor).'),
-});
-export type SuggestChordProgressionsInput = z.infer<typeof SuggestChordProgressionsInputSchema>;
-
-const SuggestChordProgressionsOutputSchema = z.object({
-  chordProgressions: z.array(z.string()).describe('An array of suggested chord progressions for the given key.'),
-});
-export type SuggestChordProgressionsOutput = z.infer<typeof SuggestChordProgressionsOutputSchema>;
-
-export async function suggestChordProgressions(input: SuggestChordProgressionsInput): Promise<SuggestChordProgressionsOutput> {
-  return suggestChordProgressionsFlow(input);
-}
 
 const prompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
@@ -46,3 +37,7 @@ const suggestChordProgressionsFlow = ai.defineFlow(
     return output!;
   }
 );
+
+export async function suggestChordProgressions(input: SuggestChordProgressionsInput): Promise<SuggestChordProgressionsOutput> {
+  return suggestChordProgressionsFlow(input);
+}

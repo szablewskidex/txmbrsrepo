@@ -5,28 +5,17 @@
  * @fileOverview AI melody generation flow.
  *
  * - generateMelodyFromPrompt - A function that generates a melody based on a text prompt.
- * - GenerateMelodyInput - The input type for the generateMelodyFromPrompt function.
- * - GenerateMelodyOutput - The return type for the generateMelodyFromPrompt function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { suggestChordProgressions } from './suggest-chord-progressions';
-
-const MelodyNoteSchema = z.object({
-  note: z.string().describe('The note name (e.g., C4).'),
-  start: z.number().describe('The start time of the note in beats.'),
-  duration: z.number().describe('The duration of the note in beats. Maximum value is 16.'),
-  velocity: z.number().describe('The velocity of the note (0-127).'),
-  slide: z.boolean().describe('Whether the note has a slide/portamento effect.'),
-});
-
-const GenerateMelodyInputSchema = z.object({
-  prompt: z.string().describe('A prompt describing the desired melody, including key, tempo, and length (e.g., \'A-minor, tempo 120, 8 bars\').'),
-  exampleMelody: z.array(MelodyNoteSchema).optional().describe('An optional example melody to guide the generation.'),
-  chordProgression: z.string().optional().describe('A specific chord progression to base the melody on (e.g., "Am-G-C-F").'),
-});
-export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
+import { 
+  GenerateMelodyInputSchema, 
+  GenerateMelodyOutputSchema, 
+  type GenerateMelodyInput, 
+  type GenerateMelodyOutput 
+} from '@/lib/schemas';
 
 const InternalPromptInputSchema = z.object({
   prompt: z.string(),
@@ -34,13 +23,6 @@ const InternalPromptInputSchema = z.object({
   exampleMelodyJSON: z.string().optional(),
 });
 
-
-const GenerateMelodyOutputSchema = z.array(MelodyNoteSchema);
-export type GenerateMelodyOutput = z.infer<typeof GenerateMelodyOutputSchema>;
-
-export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateMelodyOutput> {
-  return generateMelodyFromPromptFlow(input);
-}
 
 const generateMelodyPrompt = ai.definePrompt({
   name: 'generateMelodyPrompt',
@@ -101,3 +83,7 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     return validatedOutput;
   }
 );
+
+export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateMelodyOutput> {
+  return generateMelodyFromPromptFlow(input);
+}

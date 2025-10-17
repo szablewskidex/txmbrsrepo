@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -7,7 +8,8 @@ import type { Note, GhostNote } from '@/lib/types';
 import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
 import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
 import { useToast } from "@/hooks/use-toast";
-import { generateMelodyAction, suggestChordProgressionsAction } from '@/app/actions';
+import { generateMelodyAction, suggestChordProgressionsAction, analyzeAndGenerateAction } from '@/app/actions';
+import type { GenerateMelodyOutput } from '@/lib/schemas';
 
 import { Toolbar } from './Toolbar';
 import { PianoKeys } from './PianoKeys';
@@ -96,7 +98,7 @@ export function PianoRoll() {
     
     notes.forEach(note => {
       track.addEvent(new MidiWriter.NoteEvent({
-        pitch: [indexToMidiNote(note.pitch)],
+        pitch: [indexToMidiNote(note.pitch as number)],
         duration: `T${Math.round(note.duration * 96)}`, // Assuming 96 ticks per beat (quarter note)
         startTick: note.start * 96,
         velocity: Math.round(note.velocity / 127 * 100),
@@ -116,7 +118,7 @@ export function PianoRoll() {
 
   const exportJson = () => {
     const exportData = notes.map(n => ({
-        note: indexToNote(n.pitch),
+        note: indexToNote(n.pitch as number),
         start: n.start,
         duration: n.duration,
         velocity: n.velocity,
@@ -200,51 +202,66 @@ export function PianoRoll() {
     }
   };
 
-  const handleGenerateMelody = async (prompt: string, useExample: boolean, chordProgression?: string) => {
+  const handleGenerateMelody = async (prompt: string, useExample: boolean, chordProgression?: string, youtubeUrl?: string) => {
     setIsGenerating(true);
   
-    // Extract key from prompt to suggest chords if needed, or to inform the AI
-    const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
-    const key = keyMatch ? keyMatch[0] : currentKey;
-    if (key !== currentKey) {
-      setCurrentKey(key);
+    const processAndSetNotes = (data: GenerateMelodyOutput | null) => {
+        if (!data) return;
+        const aiNotes: Note[] = data.map(aiNote => {
+            const pitch = noteToIndex(aiNote.note);
+            if (pitch === -1) {
+              console.warn(`AI wygenerowało nieprawidłową nutę: ${aiNote.note}`);
+              return null;
+            }
+            return {
+              id: nextId.current++,
+              start: aiNote.start,
+              duration: aiNote.duration,
+              pitch,
+              velocity: aiNote.velocity,
+              slide: aiNote.slide,
+            };
+          }).filter((n): n is Note => n !== null);
+          
+          if (useExample || youtubeUrl) {
+            setNotes(aiNotes);
+          } else {
+            setNotes(prev => [...prev, ...aiNotes]);
+          }
+          toast({ title: "Melodia Wygenerowana", description: "AI stworzyło nową kompozycję." });
     }
-  
-    const exampleMelody = useExample ? notes.map(n => ({
-        note: indexToNote(n.pitch),
-        start: n.start,
-        duration: n.duration,
-        velocity: n.velocity,
-        slide: n.slide,
-    })) : undefined;
-  
-    const result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
-    
-    if (result.error) {
-      toast({ variant: "destructive", title: "Błąd AI", description: result.error });
-    } else if (result.data) {
-      const aiNotes: Note[] = result.data.map(aiNote => {
-        const pitch = noteToIndex(aiNote.note);
-        if (pitch === -1) {
-          console.warn(`AI wygenerowało nieprawidłową nutę: ${aiNote.note}`);
-          return null;
+
+
+    if (youtubeUrl) {
+        const result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
+        if (result.error) {
+            toast({ variant: "destructive", title: "Błąd Analizy YouTube", description: result.error });
+        } else {
+            processAndSetNotes(result.data);
         }
-        return {
-          id: nextId.current++,
-          start: aiNote.start,
-          duration: aiNote.duration,
-          pitch,
-          velocity: aiNote.velocity,
-          slide: aiNote.slide,
-        };
-      }).filter((n): n is Note => n !== null);
+    } else {
+         // Extract key from prompt to suggest chords if needed, or to inform the AI
+        const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
+        const key = keyMatch ? keyMatch[0] : currentKey;
+        if (key !== currentKey) {
+          setCurrentKey(key);
+        }
       
-      if (useExample) {
-        setNotes(aiNotes);
-      } else {
-        setNotes(prev => [...prev, ...aiNotes]);
-      }
-      toast({ title: "Melodia Wygenerowana", description: "AI stworzyło nową kompozycję." });
+        const exampleMelody = useExample ? notes.map(n => ({
+            note: indexToNote(n.pitch as number),
+            start: n.start,
+            duration: n.duration,
+            velocity: n.velocity,
+            slide: n.slide,
+        })) : undefined;
+      
+        const result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
+        
+        if (result.error) {
+          toast({ variant: "destructive", title: "Błąd AI", description: result.error });
+        } else {
+            processAndSetNotes(result.data);
+        }
     }
     
     setIsGenerating(false);

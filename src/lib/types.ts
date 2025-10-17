@@ -2,7 +2,7 @@ export interface Note {
   id: number;
   start: number;
   duration: number;
-  pitch: number; // index in PIANO_KEYS
+  pitch: number | string; // index in PIANO_KEYS or note name string
   velocity: number;
   slide: boolean;
 }
