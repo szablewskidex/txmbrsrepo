@@ -49,7 +49,6 @@ Prompt: {{{prompt}}}
 
 {{#if exampleMelodyJSON}}
 Use the following melody as inspiration for the general style, mood, and rhythmic patterns. Do not copy the example melody. Instead, create a completely new and unique melody that captures a similar feeling.
-
 Example Melody:
 {{{exampleMelodyJSON}}}
 {{/if}}
