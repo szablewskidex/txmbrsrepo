@@ -309,7 +309,10 @@ export function PianoRoll() {
     const newChords = convertAiNotes(composition.chords);
     const newBassline = convertAiNotes(composition.bassline);
 
-    setNotes([...newMelody, ...newChords, ...newBassline]);
+    const allNotes = [...newMelody, ...newChords, ...newBassline];
+    allNotes.sort((a, b) => a.start - b.start);
+    
+    setNotes(allNotes);
     toast({ title: "Kompozycja Wygenerowana", description: "AI stworzyło nową, pełną kompozycję." });
   };
 
