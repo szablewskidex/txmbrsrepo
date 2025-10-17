@@ -22,7 +22,7 @@ import { Timeline } from './Timeline';
 export function PianoRoll() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [ghostNotes, setGhostNotes] = useState<GhostNote[]>([]);
-  const [measures, setMeasures] = useState(DEFAULT_MEASURES); // Renamed from beats
+  const [measures, setMeasures] = useState(DEFAULT_MEASURES);
   const [cellPx, setCellPx] = useState(DEFAULT_CELL_PX);
   const [verticalZoom, setVerticalZoom] = useState(1);
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
@@ -171,13 +171,15 @@ export function PianoRoll() {
 
   const exportMidi = () => {
     const track = new MidiWriter.Track();
+    const bpm = Tone.Transport.bpm.value;
+    track.setTempo(bpm);
     track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
     
     notes.forEach(note => {
       track.addEvent(new MidiWriter.NoteEvent({
         pitch: [indexToMidiNote(note.pitch as number)],
-        duration: `T${Math.round(note.duration * 96)}`, // Assuming 96 ticks per beat (quarter note)
-        startTick: note.start * 96,
+        duration: `T${MidiWriter.Utils.getTickDuration(note.duration, bpm)}`,
+        startTick: MidiWriter.Utils.getTickDuration(note.start, bpm),
         velocity: Math.round(note.velocity / 127 * 100),
       }));
     });
