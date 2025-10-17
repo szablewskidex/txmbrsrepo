@@ -64,7 +64,7 @@ The composition MUST adhere to the principles of music theory. The notes you cho
 
 Return a JSON object with three keys: "bassline", "chords", and "melody". Each key should contain an array of note objects. Each note object must have:
 - note: The note name (e.g., C4).
-- start: The start time in beats.
+- start: The start time in beats. The start time MUST be between 0 and 31.9.
 - duration: The duration in beats.
 - velocity: The velocity (0-127).
 - slide: A boolean for portamento.`,
@@ -143,9 +143,9 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     
     // Final validation and correction on the best-effort output
     const validatedOutput: GenerateFullCompositionOutput = {
-      melody: validateAndCorrectMelody(lastOutput.melody, key, { quantizeGrid: 1/32, correctToScale: true, maxInterval: 12 }),
-      chords: validateAndCorrectMelody(lastOutput.chords, key, { quantizeGrid: 1/16, correctToScale: true }),
-      bassline: validateAndCorrectMelody(lastOutput.bassline, key, { quantizeGrid: 1/8, correctToScale: true }),
+      melody: validateAndCorrectMelody(lastOutput.melody, key, { maxDuration: 32, quantizeGrid: 1/32, correctToScale: true, maxInterval: 12 }),
+      chords: validateAndCorrectMelody(lastOutput.chords, key, { maxDuration: 32, quantizeGrid: 1/16, correctToScale: true }),
+      bassline: validateAndCorrectMelody(lastOutput.bassline, key, { maxDuration: 32, quantizeGrid: 1/8, correctToScale: true }),
     };
     
     return validatedOutput;
