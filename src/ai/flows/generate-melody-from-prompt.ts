@@ -33,8 +33,12 @@ const generateMelodyPrompt = ai.definePrompt({
 
 The composition MUST adhere to the principles of music theory. The notes you choose must complement the underlying harmony of the chord progression.
 
+**Length and Structure:**
+- The composition should be at least 8 bars (beats 0 to 32).
+- The melody should evolve over time. Create a sense of progression by introducing variations and repeating motifs. Avoid making it a simple 2 or 4-bar loop. Think in terms of a short A and B section if possible.
+
 **Layers:**
-1.  **Bassline**: Create a simple, rhythmic bassline using the root notes of the provided chord progression. The notes should be in a low octave (e.g., C2-C3) and have a longer duration, providing a solid foundation.
+1.  **Bassline**: Create a simple, rhythmic bassline using the root notes of the provided chord progression. The notes should be in a low octave (e.g., C2-C3) and have a longer duration, providing a solid foundation across the full length of the composition.
 2.  **Chords**: Create a chordal accompaniment based on the progression. The chords should be played as block chords or simple arpeggios. The velocity should be lower than the melody to create depth.
 3.  **Melody**: Create an engaging top melody that sits in a higher register (e.g., C4-C6). The melody should be creative, using passing tones, arpeggios, and scale runs to create a fluid and interesting line that works with the harmony. It should have more rhythmic variation than the other layers.
 
