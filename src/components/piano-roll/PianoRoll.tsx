@@ -88,7 +88,6 @@ export function PianoRoll() {
     let animationFrameId: number;
 
     const loop = () => {
-        // Use Tone.Transport.progress which returns a value between 0-1
         setPlayPosition(Tone.Transport.progress * beats);
         animationFrameId = requestAnimationFrame(loop);
     };
@@ -96,10 +95,16 @@ export function PianoRoll() {
     if (isPlaying) {
         animationFrameId = requestAnimationFrame(loop);
     } else {
-        cancelAnimationFrame(animationFrameId!);
+        if (typeof animationFrameId !== 'undefined') {
+            cancelAnimationFrame(animationFrameId);
+        }
     }
 
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+        if (typeof animationFrameId !== 'undefined') {
+            cancelAnimationFrame(animationFrameId);
+        }
+    };
   }, [isPlaying, beats]);
 
    // Fetch chord progressions when the key changes
@@ -169,10 +174,12 @@ export function PianoRoll() {
         const time = Tone.Time(note.start, "i").toNotation(); 
         const duration = Tone.Time(note.duration, "i").toNotation();
 
-        const eventId = Tone.Transport.schedule(t => {
-            synth.triggerAttackRelease(noteName, duration, t, note.velocity / 127);
-        }, time);
-        scheduledEventsRef.current.push(eventId);
+        if (note.duration > 0) {
+          const eventId = Tone.Transport.schedule(t => {
+              synth.triggerAttackRelease(noteName, duration, t, note.velocity / 127);
+          }, time);
+          scheduledEventsRef.current.push(eventId);
+        }
       }
     });
   }, [notes]);
@@ -367,13 +374,13 @@ export function PianoRoll() {
               setCurrentKey(key);
             }
           
-            const exampleMelody = useExample ? notes.map(n => ({
+            const exampleMelody = (useExample && notes.length > 0) ? notes.map(n => ({
                 note: indexToNote(n.pitch as number),
                 start: n.start,
                 duration: n.duration,
                 velocity: n.velocity,
                 slide: n.slide,
-            })) : undefined;
+            })) : null;
           
             result = await generateMelodyAction({ prompt: fullPrompt, exampleMelody, chordProgression });
             
@@ -493,8 +500,3 @@ export function PianoRoll() {
     </div>
   );
 }
-
-    
-    
-
-    
