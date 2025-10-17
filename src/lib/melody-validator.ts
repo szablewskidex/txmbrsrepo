@@ -51,40 +51,47 @@ function isNoteInScale(noteName: string, key: string, scaleType: keyof typeof SC
  * Koryguje nutę do najbliższej w skali
  */
 function snapToScale(noteName: string, key: string, scaleType: keyof typeof SCALES = 'minor'): string {
-  const midiNote = noteToMidi(noteName);
-  const octave = Math.floor(midiNote / 12) - 1;
+  const originalMidi = noteToMidi(noteName);
+  const octave = Math.floor(originalMidi / 12) - 1;
   const rootNoteName = key.split(' ')[0];
-  const rootMidiBase = noteToMidi(rootNoteName + '4');
-  
-  const noteInScale = (midiNote - rootMidiBase + 1200) % 12;
-  
+  const rootMidiBase = NOTE_MAP[rootNoteName];
+
+  const noteInOctave = originalMidi % 12;
+
   const scale = SCALES[scaleType];
   
-  // Znajdź najbliższą nutę w skali
+  // Find the closest note in the scale based on chromatic distance
   let closestInterval = scale[0];
   let minDistance = 12;
   
   for (const interval of scale) {
-    const distance = Math.min(Math.abs(noteInScale - interval), 12 - Math.abs(noteInScale - interval));
+    const scaleNoteInOctave = (rootMidiBase + interval) % 12;
+    const distance = Math.min(Math.abs(noteInOctave - scaleNoteInOctave), 12 - Math.abs(noteInOctave - scaleNoteInOctave));
     if (distance < minDistance) {
       minDistance = distance;
       closestInterval = interval;
     }
   }
   
-  const correctedMidiInOctave = rootMidiBase % 12 + closestInterval;
-  const correctedMidi = (octave) * 12 + correctedMidiInOctave;
+  const correctedNoteInOctave = (rootMidiBase + closestInterval) % 12;
+  
+  // Try to determine the best octave. The original octave is a good guess.
+  let correctedMidi = (octave + 1) * 12 + correctedNoteInOctave - (rootMidiBase);
+  correctedMidi = (octave + 1) * 12 + (noteInOctave - (noteInOctave - correctedNoteInOctave));
 
-  // Sometimes the octave can be off by one, let's try to keep it close to the original
-  const originalMidi = noteToMidi(noteName);
-  if (Math.abs(originalMidi - correctedMidi) > 6) {
-      const altCorrectedMidi = correctedMidi + 12 * Math.sign(originalMidi - correctedMidi);
-      if(Math.abs(originalMidi - altCorrectedMidi) < Math.abs(originalMidi - correctedMidi)) {
-          return midiToNote(altCorrectedMidi);
-      }
+  const noteBase = noteToMidi(noteName) % 12;
+  const correctedNoteBase = (rootMidiBase + closestInterval) % 12;
+  
+  let finalMidi = noteToMidi(noteName) - noteBase + correctedNoteBase;
+
+  // If the correction crosses the C/B boundary, we might need to adjust octave
+  if (noteBase < correctedNoteBase && correctedNoteBase - noteBase > 6) {
+      finalMidi -= 12;
+  } else if (noteBase > correctedNoteBase && noteBase - correctedNoteBase > 6) {
+      finalMidi += 12;
   }
 
-  return midiToNote(correctedMidi);
+  return midiToNote(finalMidi);
 }
 
 
