@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -236,6 +237,7 @@ export function PianoRoll() {
       const bpm = midi.header.tempos[0]?.bpm || 120;
       Tone.Transport.bpm.value = bpm;
       
+      const ppq = midi.header.ppq;
       const newNotes: Note[] = [];
       let maxTimeInBeats = 0;
 
@@ -245,8 +247,9 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                const startInBeats = note.time * (bpm / 60) / (midi.header.ppq / 60);
-                const durationInBeats = note.duration * (bpm / 60) / (midi.header.ppq / 60);
+                // Convert time (in seconds) and duration (in seconds) to beats
+                const startInBeats = note.time * (bpm / 60);
+                const durationInBeats = note.duration * (bpm / 60);
 
                 newNotes.push({
                     id: nextId.current++,

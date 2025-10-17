@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const MelodyNoteSchema = z.object({
   note: z.string().describe('The note name (e.g., C4).'),
   start: z.number().describe('The start time of the note in beats.'),
-  duration: z.number().describe('The duration of the note in beats. Maximum value is 16.'),
+  duration: z.number().describe('The duration of the note in beats.'),
   velocity: z.number().describe('The velocity of the note (0-127).'),
   slide: z.boolean().describe('Whether the note has a slide/portamento effect.'),
 });

@@ -177,8 +177,7 @@ export function validateAndCorrectMelody(
 
     for (const note of processedNotes) {
         const startSlot = quantize(note.start, quantizeGrid > 0 ? quantizeGrid : 0.125);
-        const pitch = note.note;
-        const key = `${startSlot}:${pitch}`;
+        const key = `${startSlot}:${note.note}`;
 
         if (!timeSlots.has(key)) {
             uniqueNotes.push(note);
