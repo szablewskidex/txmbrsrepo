@@ -170,12 +170,14 @@ export function PianoRoll() {
 
 
   const exportMidi = () => {
-    const track = new MidiWriter.Track();
     const bpm = Tone.Transport.bpm.value || 120;
+    const track = new MidiWriter.Track();
     track.setTempo(bpm);
     track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
     
-    notes.forEach(note => {
+    const sortedNotes = [...notes].sort((a, b) => a.start - b.start);
+
+    sortedNotes.forEach(note => {
         const duration = note.duration > 0 ? `T${MidiWriter.Utils.getTickDuration(note.duration, bpm)}` : 'T1';
         track.addEvent(new MidiWriter.NoteEvent({
             pitch: [indexToMidiNote(note.pitch as number)],
@@ -226,8 +228,7 @@ export function PianoRoll() {
       
       const bpm = midi.header.tempos[0]?.bpm || 120;
       Tone.Transport.bpm.value = bpm;
-      const secondsPerBeat = 60 / bpm;
-
+      
       const newNotes: Note[] = [];
       let maxTimeInBeats = 0;
 
@@ -237,8 +238,9 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                const startInBeats = note.time / secondsPerBeat;
-                const durationInBeats = note.duration / secondsPerBeat;
+                const startInBeats = note.time * (bpm / 60);
+                const durationInBeats = note.duration * (bpm / 60);
+
                 newNotes.push({
                     id: nextId.current++,
                     start: startInBeats,

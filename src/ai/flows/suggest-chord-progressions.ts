@@ -21,6 +21,7 @@ const chordProgressionCache = new Map<string, string[]>();
 async function getCachedChordProgressions(key: string): Promise<string[]> {
   if (!chordProgressionCache.has(key)) {
     console.log(`Cache miss for key: ${key}. Fetching from AI...`);
+    // Poprawka: Wywołaj `suggestChordProgressionsFlow` zamiast rekurencyjnego wywołania siebie
     const suggestions = await suggestChordProgressionsFlow({ key });
     chordProgressionCache.set(key, suggestions.chordProgressions);
   } else {
