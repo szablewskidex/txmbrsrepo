@@ -1,18 +1,17 @@
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
 const STAGES = [
-  { name: 'Rozgrzewka AI...', duration: 2000, progressShare: 10 },
-  { name: 'Sugerowanie progresji akordów...', duration: 3000, progressShare: 10 },
-  { name: 'Komponowanie melodii...', duration: 8000, progressShare: 40 },
-  { name: 'Aranżacja akordów...', duration: 5000, progressShare: 15 },
-  { name: 'Tworzenie linii basowej...', duration: 4000, progressShare: 15 },
-  { name: 'Finalny mastering i kwantyzacja...', duration: 3000, progressShare: 10 },
+  { name: 'Rozgrzewka AI...', duration: 2000, progressShare: 5 },
+  { name: 'Sugerowanie progresji akordów...', duration: 4000, progressShare: 10 },
+  { name: 'Komponowanie melodii...', duration: 25000, progressShare: 50 },
+  { name: 'Aranżacja akordów...', duration: 15000, progressShare: 20 },
+  { name: 'Tworzenie linii basowej...', duration: 10000, progressShare: 10 },
+  { name: 'Finalny mastering i kwantyzacja...', duration: 4000, progressShare: 5 },
 ];
 
-const TOTAL_DURATION = STAGES.reduce((acc, stage) => acc + stage.duration, 0);
+const TOTAL_DURATION = STAGES.reduce((acc, stage) => acc + stage.duration, 0); // ~60 seconds
 
 export function useGenerationProgress() {
   const [progress, setProgress] = useState(0);
@@ -24,6 +23,13 @@ export function useGenerationProgress() {
   const updateProgress = useCallback(() => {
     const elapsedTime = Date.now() - startTimeRef.current;
     
+    if (elapsedTime >= TOTAL_DURATION) {
+      setProgress(99);
+      setStatus('Finalizowanie...');
+      // Don't clear the interval, let it sit at 99% until stop() is called.
+      return;
+    }
+
     let cumulativeDuration = 0;
     let currentStageIndex = -1;
     for (let i = 0; i < STAGES.length; i++) {
@@ -33,19 +39,13 @@ export function useGenerationProgress() {
             break;
         }
     }
-
+    
     if (currentStageIndex === -1) {
-        // We've finished the simulation, but the real process might still be running.
-        // Hold at 99% and wait for the final stop() call.
+        // Should not happen with the check above, but as a fallback
         setProgress(99);
-        setStatus('Finalizowanie...');
-        if (intervalRef.current) {
-            // No need to clear the interval here, stop() will handle it.
-            // This allows the "Finalizowanie..." state to persist.
-        }
+        setStatus('Prawie gotowe...');
         return;
     }
-
 
     const currentStage = STAGES[currentStageIndex];
     const stageStartTime = cumulativeDuration - currentStage.duration;
@@ -59,7 +59,6 @@ export function useGenerationProgress() {
     
     const overallProgress = progressSoFar + stageProgress * currentStage.progressShare;
 
-    // Cap the simulated progress at 99 to wait for the final `stop` call
     setProgress(Math.min(99, overallProgress));
     setStatus(currentStage.name);
 
@@ -68,16 +67,18 @@ export function useGenerationProgress() {
   const start = useCallback(() => {
     if (isRunning) return;
     setIsRunning(true);
+    setProgress(0);
+    setStatus('Inicjalizacja...');
     startTimeRef.current = Date.now();
     intervalRef.current = setInterval(updateProgress, 100);
   }, [isRunning, updateProgress]);
 
   const stop = useCallback(() => {
-    setIsRunning(false);
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    setIsRunning(false);
     setProgress(100);
     setStatus('Gotowe!');
   }, []);
