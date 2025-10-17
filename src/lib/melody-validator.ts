@@ -51,47 +51,40 @@ function isNoteInScale(noteName: string, key: string, scaleType: keyof typeof SC
  * Koryguje nutę do najbliższej w skali
  */
 function snapToScale(noteName: string, key: string, scaleType: keyof typeof SCALES = 'minor'): string {
-  const originalMidi = noteToMidi(noteName);
-  const octave = Math.floor(originalMidi / 12) - 1;
-  const rootNoteName = key.split(' ')[0];
-  const rootMidiBase = NOTE_MAP[rootNoteName];
+    const originalMidi = noteToMidi(noteName);
+    const rootNoteName = key.split(' ')[0];
+    const rootMidiBase = NOTE_MAP[rootNoteName];
 
-  const noteInOctave = originalMidi % 12;
+    const noteInOctave = originalMidi % 12;
+    const scale = SCALES[scaleType];
 
-  const scale = SCALES[scaleType];
-  
-  // Find the closest note in the scale based on chromatic distance
-  let closestInterval = scale[0];
-  let minDistance = 12;
-  
-  for (const interval of scale) {
-    const scaleNoteInOctave = (rootMidiBase + interval) % 12;
-    const distance = Math.min(Math.abs(noteInOctave - scaleNoteInOctave), 12 - Math.abs(noteInOctave - scaleNoteInOctave));
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestInterval = interval;
+    let closestNoteInScale = -1;
+    let minDistance = Infinity;
+
+    // Find the closest scale degree in the chromatic circle
+    for (const interval of scale) {
+        const scaleNoteBase = (rootMidiBase + interval) % 12;
+        const distance = Math.min(
+            Math.abs(noteInOctave - scaleNoteBase),
+            12 - Math.abs(noteInOctave - scaleNoteBase)
+        );
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestNoteInScale = scaleNoteBase;
+        }
     }
-  }
-  
-  const correctedNoteInOctave = (rootMidiBase + closestInterval) % 12;
-  
-  // Try to determine the best octave. The original octave is a good guess.
-  let correctedMidi = (octave + 1) * 12 + correctedNoteInOctave - (rootMidiBase);
-  correctedMidi = (octave + 1) * 12 + (noteInOctave - (noteInOctave - correctedNoteInOctave));
 
-  const noteBase = noteToMidi(noteName) % 12;
-  const correctedNoteBase = (rootMidiBase + closestInterval) % 12;
-  
-  let finalMidi = noteToMidi(noteName) - noteBase + correctedNoteBase;
+    let pitchCorrection = closestNoteInScale - noteInOctave;
+    // Adjust for circular distance
+    if (pitchCorrection > 6) {
+        pitchCorrection -= 12;
+    } else if (pitchCorrection < -6) {
+        pitchCorrection += 12;
+    }
+    
+    const correctedMidi = originalMidi + pitchCorrection;
 
-  // If the correction crosses the C/B boundary, we might need to adjust octave
-  if (noteBase < correctedNoteBase && correctedNoteBase - noteBase > 6) {
-      finalMidi -= 12;
-  } else if (noteBase > correctedNoteBase && noteBase - correctedNoteBase > 6) {
-      finalMidi += 12;
-  }
-
-  return midiToNote(finalMidi);
+    return midiToNote(correctedMidi);
 }
 
 
@@ -277,7 +270,3 @@ export function analyzeMelody(notes: MelodyNote[]): {
   
   return { avgInterval, maxInterval, rhythmicDensity, range, score };
 }
-
-    
-
-    
