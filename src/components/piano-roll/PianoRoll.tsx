@@ -87,8 +87,9 @@ export function PianoRoll() {
   useEffect(() => {
     let animationFrameId: number;
 
-    const loop = (time: number) => {
-        setPlayPosition(Tone.Transport.seconds / Tone.Time('1m').toSeconds() * (Tone.Transport.bpm.value || 120));
+    const loop = () => {
+        // Use Tone.Transport.progress which returns a value between 0-1
+        setPlayPosition(Tone.Transport.progress * beats);
         animationFrameId = requestAnimationFrame(loop);
     };
 
@@ -99,7 +100,7 @@ export function PianoRoll() {
     }
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isPlaying]);
+  }, [isPlaying, beats]);
 
    // Fetch chord progressions when the key changes
    useEffect(() => {
@@ -163,9 +164,13 @@ export function PianoRoll() {
     // Schedule new events
     notes.forEach(note => {
         const noteName = indexToNote(note.pitch as number);
-        const eventId = Tone.Transport.schedule(time => {
-            synth.triggerAttackRelease(noteName, note.duration, time, note.velocity / 127);
-        }, note.start);
+        // Convert beats to Tone.Time notation (e.g. "4n", "8n")
+        const time = Tone.Time(note.start, "i").toNotation(); 
+        const duration = Tone.Time(note.duration, "i").toNotation();
+
+        const eventId = Tone.Transport.schedule(t => {
+            synth.triggerAttackRelease(noteName, duration, t, note.velocity / 127);
+        }, time);
         scheduledEventsRef.current.push(eventId);
     });
   }, [notes]);
@@ -181,7 +186,7 @@ export function PianoRoll() {
     } else {
         scheduleNotes();
         Tone.Transport.loop = true;
-        Tone.Transport.loopEnd = beats;
+        Tone.Transport.loopEnd = Tone.Time(beats, 'i').toNotation();
         Tone.Transport.start();
     }
     setIsPlaying(p => !p);
@@ -486,3 +491,5 @@ export function PianoRoll() {
     </div>
   );
 }
+
+    
