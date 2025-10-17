@@ -111,6 +111,7 @@ export function validateAndCorrectMelody(
     humanize?: boolean;
     maxInterval?: number; // maksymalny skok melodyczny w półtonach
     removeDuplicates?: boolean;
+    ensureMinNotes?: number; // NOWA OPCJA
   } = {}
 ): MelodyNote[] {
   const {
@@ -120,6 +121,7 @@ export function validateAndCorrectMelody(
     humanize: shouldHumanize = false,
     maxInterval = 12, // maksymalnie oktawa
     removeDuplicates = true,
+    ensureMinNotes = 0,
   } = options;
 
   if (!notes || notes.length === 0) {
@@ -186,13 +188,29 @@ export function validateAndCorrectMelody(
     }
     processedNotes = uniqueNotes;
   }
+  
+  // 7. Zapewnij minimalną liczbę nut (prosta strategia - duplikowanie)
+  if (ensureMinNotes > 0 && processedNotes.length > 0 && processedNotes.length < ensureMinNotes) {
+    const originalNotes = [...processedNotes];
+    while (processedNotes.length < ensureMinNotes) {
+      const noteToCopy = originalNotes[processedNotes.length % originalNotes.length];
+      const lastNote = processedNotes[processedNotes.length-1];
+      const newStart = lastNote.start + lastNote.duration;
+      if (newStart + noteToCopy.duration <= maxDuration) {
+        processedNotes.push({ ...noteToCopy, start: newStart });
+      } else {
+        break; 
+      }
+    }
+  }
 
-  // 7. Humanizacja (opcjonalna)
+
+  // 8. Humanizacja (opcjonalna)
   if (shouldHumanize) {
     processedNotes = processedNotes.map(note => humanize(note));
   }
 
-  // 8. Ostateczne sortowanie
+  // 9. Ostateczne sortowanie
   processedNotes.sort((a, b) => a.start - b.start);
 
   return processedNotes;
