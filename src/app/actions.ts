@@ -8,7 +8,7 @@ import {
   SuggestChordProgressionsInputSchema,
   AnalyzeYouTubeInputSchema,
   type GenerateMelodyInput,
-  type GenerateMelodyOutput,
+  type GenerateFullCompositionOutput,
   type SuggestChordProgressionsInput,
   type SuggestChordProgressionsOutput,
   type AnalyzeYouTubeInput
@@ -17,15 +17,15 @@ import {
 
 // Server Actions
 
-export async function generateMelodyAction(input: GenerateMelodyInput): Promise<{ data: GenerateMelodyOutput | null; error: string | null; }> {
+export async function generateMelodyAction(input: GenerateMelodyInput): Promise<{ data: GenerateFullCompositionOutput | null; error: string | null; }> {
   const validation = GenerateMelodyInputSchema.safeParse(input);
   if (!validation.success) {
     return { data: null, error: validation.error.flatten().formErrors.join(', ') };
   }
   
   try {
-    const melody = await generateMelodyFromPrompt(validation.data);
-    return { data: melody, error: null };
+    const composition = await generateMelodyFromPrompt(validation.data);
+    return { data: composition, error: null };
   } catch (error) {
     console.error('Error generating melody:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -51,7 +51,7 @@ export async function suggestChordProgressionsAction(input: SuggestChordProgress
 }
 
 
-export async function analyzeAndGenerateAction(input: AnalyzeYouTubeInput): Promise<{ data: GenerateMelodyOutput | null; error: string | null; }> {
+export async function analyzeAndGenerateAction(input: AnalyzeYouTubeInput): Promise<{ data: GenerateFullCompositionOutput | null; error: string | null; }> {
     const validation = AnalyzeYouTubeInputSchema.safeParse(input);
     if (!validation.success) {
       return { data: null, error: validation.error.flatten().formErrors.join(', ') };

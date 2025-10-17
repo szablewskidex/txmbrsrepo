@@ -9,7 +9,12 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { generateMelodyFromPrompt } from './generate-melody-from-prompt';
-import { AnalyzeYouTubeInputSchema, GenerateMelodyOutputSchema, type AnalyzeYouTubeInput, type GenerateMelodyOutput } from '@/lib/schemas';
+import { 
+    AnalyzeYouTubeInputSchema,
+    GenerateFullCompositionOutputSchema,
+    type AnalyzeYouTubeInput, 
+    type GenerateFullCompositionOutput
+} from '@/lib/schemas';
 
 
 const AnalyzedMelodySchema = z.object({
@@ -66,7 +71,7 @@ const youtubeAnalysisFlow = ai.defineFlow(
   {
     name: 'analyzeYouTubeAndGenerateMelodyFlow',
     inputSchema: AnalyzeYouTubeInputSchema,
-    outputSchema: GenerateMelodyOutputSchema,
+    outputSchema: GenerateFullCompositionOutputSchema,
   },
   async ({ youtubeUrl, targetPrompt }) => {
     // 1. "Analyze" the youtube video to get a melody
@@ -84,16 +89,16 @@ const youtubeAnalysisFlow = ai.defineFlow(
     const finalPrompt = targetPrompt || `A new melody inspired by the analysis, in a dark, minor key. Original tempo was ${analysis.tempo} BPM.`;
 
     // 3. Call the existing melody generation flow, providing the analyzed melody as an example.
-    const generatedMelody = await generateMelodyFromPrompt({
+    const generatedComposition = await generateMelodyFromPrompt({
       prompt: finalPrompt,
       exampleMelody: exampleMelodyForPrompt,
     });
     
-    return generatedMelody;
+    return generatedComposition;
   }
 );
 
 
-export async function analyzeYouTubeAndGenerateMelody(input: AnalyzeYouTubeInput): Promise<GenerateMelodyOutput> {
+export async function analyzeYouTubeAndGenerateMelody(input: AnalyzeYouTubeInput): Promise<GenerateFullCompositionOutput> {
     return youtubeAnalysisFlow(input);
 }

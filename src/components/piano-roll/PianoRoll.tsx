@@ -10,7 +10,7 @@ import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
 import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
 import { useToast } from "@/hooks/use-toast";
 import { generateMelodyAction, suggestChordProgressionsAction, analyzeAndGenerateAction } from '@/app/actions';
-import type { GenerateMelodyOutput } from '@/lib/schemas';
+import type { GenerateFullCompositionOutput, MelodyNote } from '@/lib/schemas';
 
 import { Toolbar } from './Toolbar';
 import { PianoKeys } from './PianoKeys';
@@ -268,36 +268,39 @@ export function PianoRoll() {
     }
   };
 
+  const processAndSetNotes = (composition: GenerateFullCompositionOutput | null) => {
+    if (!composition) return;
+
+    const convertAiNotes = (aiNotes: MelodyNote[]): Note[] => {
+      return aiNotes.map(aiNote => {
+        const pitch = noteToIndex(aiNote.note);
+        if (pitch === -1) {
+          console.warn(`AI wygenerowało nieprawidłową nutę: ${aiNote.note}`);
+          return null;
+        }
+        return {
+          id: nextId.current++,
+          start: aiNote.start,
+          duration: aiNote.duration,
+          pitch,
+          velocity: aiNote.velocity,
+          slide: aiNote.slide,
+        };
+      }).filter((n): n is Note => n !== null);
+    };
+
+    const newMelody = convertAiNotes(composition.melody);
+    const newChords = convertAiNotes(composition.chords);
+    const newBassline = convertAiNotes(composition.bassline);
+
+    setNotes([...newMelody, ...newChords, ...newBassline]);
+    toast({ title: "Kompozycja Wygenerowana", description: "AI stworzyło nową, pełną kompozycję." });
+  };
+
+
   const handleGenerateMelody = async (prompt: string, useExample: boolean, chordProgression?: string, youtubeUrl?: string) => {
     setIsGenerating(true);
   
-    const processAndSetNotes = (data: GenerateMelodyOutput | null) => {
-        if (!data) return;
-        const aiNotes: Note[] = data.map(aiNote => {
-            const pitch = noteToIndex(aiNote.note);
-            if (pitch === -1) {
-              console.warn(`AI wygenerowało nieprawidłową nutę: ${aiNote.note}`);
-              return null;
-            }
-            return {
-              id: nextId.current++,
-              start: aiNote.start,
-              duration: aiNote.duration,
-              pitch,
-              velocity: aiNote.velocity,
-              slide: aiNote.slide,
-            };
-          }).filter((n): n is Note => n !== null);
-          
-          if (useExample || youtubeUrl) {
-            setNotes(aiNotes);
-          } else {
-            setNotes(prev => [...prev, ...aiNotes]);
-          }
-          toast({ title: "Melodia Wygenerowana", description: "AI stworzyło nową kompozycję." });
-    }
-
-
     if (youtubeUrl) {
         const result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
         if (result.error) {
@@ -306,7 +309,6 @@ export function PianoRoll() {
             processAndSetNotes(result.data);
         }
     } else {
-         // Extract key from prompt to suggest chords if needed, or to inform the AI
         const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
         const key = keyMatch ? keyMatch[0] : currentKey;
         if (key !== currentKey) {
@@ -326,7 +328,34 @@ export function PianoRoll() {
         if (result.error) {
           toast({ variant: "destructive", title: "Błąd AI", description: result.error });
         } else {
-            processAndSetNotes(result.data);
+            if (useExample) {
+              processAndSetNotes(result.data);
+            } else {
+              // When not using example, append notes
+              if (result.data) {
+                const convertAiNotes = (aiNotes: MelodyNote[]): Note[] => {
+                  return aiNotes.map(aiNote => {
+                    const pitch = noteToIndex(aiNote.note);
+                    if (pitch === -1) return null;
+                    return {
+                      id: nextId.current++,
+                      start: aiNote.start,
+                      duration: aiNote.duration,
+                      pitch,
+                      velocity: aiNote.velocity,
+                      slide: aiNote.slide,
+                    };
+                  }).filter((n): n is Note => n !== null);
+                };
+                const newNotes = [
+                  ...convertAiNotes(result.data.melody),
+                  ...convertAiNotes(result.data.chords),
+                  ...convertAiNotes(result.data.bassline)
+                ];
+                setNotes(prev => [...prev, ...newNotes]);
+                toast({ title: "Kompozycja Wygenerowana", description: "AI dodało nową kompozycję." });
+              }
+            }
         }
     }
     
@@ -393,5 +422,3 @@ export function PianoRoll() {
     </div>
   );
 }
-
-    

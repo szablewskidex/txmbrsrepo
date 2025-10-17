@@ -11,10 +11,11 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { suggestChordProgressions } from './suggest-chord-progressions';
 import { 
-  GenerateMelodyInputSchema, 
-  GenerateMelodyOutputSchema, 
+  GenerateMelodyInputSchema,
+  GenerateFullCompositionOutputSchema,
   type GenerateMelodyInput, 
-  type GenerateMelodyOutput 
+  type GenerateFullCompositionOutput,
+  type MelodyNote
 } from '@/lib/schemas';
 
 const InternalPromptInputSchema = z.object({
@@ -25,38 +26,44 @@ const InternalPromptInputSchema = z.object({
 
 
 const generateMelodyPrompt = ai.definePrompt({
-  name: 'generateMelodyPrompt',
+  name: 'generateFullCompositionPrompt',
   input: {schema: InternalPromptInputSchema},
-  output: {schema: GenerateMelodyOutputSchema},
-  prompt: `You are an expert music composer and theorist specializing in minor key, dark, and trap melodies. Your task is to generate a musically coherent and compelling melody based on a prompt and a given chord progression.
+  output: {schema: GenerateFullCompositionOutputSchema},
+  prompt: `You are an expert music composer and theorist. Your task is to generate a complete, musically coherent, and compelling polyphonic composition with three distinct layers: a bassline, chords, and a top melody.
 
-The melody MUST adhere to the principles of music theory. The notes you choose must complement the underlying harmony of the chord progression. Use passing tones, arpeggios, and scale runs to create a fluid and interesting melodic line.
+The composition MUST adhere to the principles of music theory. The notes you choose must complement the underlying harmony of the chord progression.
 
-Chord Progression: {{{chordProgression}}}
-This is the harmonic foundation. The melody notes at any given point should sound good when played over the current chord.
+**Layers:**
+1.  **Bassline**: Create a simple, rhythmic bassline using the root notes of the provided chord progression. The notes should be in a low octave (e.g., C2-C3) and have a longer duration, providing a solid foundation.
+2.  **Chords**: Create a chordal accompaniment based on the progression. The chords should be played as block chords or simple arpeggios. The velocity should be lower than the melody to create depth.
+3.  **Melody**: Create an engaging top melody that sits in a higher register (e.g., C4-C6). The melody should be creative, using passing tones, arpeggios, and scale runs to create a fluid and interesting line that works with the harmony. It should have more rhythmic variation than the other layers.
 
-Prompt: {{{prompt}}}
-Use this for the overall mood, rhythm, and style.
+**Harmonic and Stylistic Instructions:**
+-   **Chord Progression**: {{{chordProgression}}}
+    This is the harmonic foundation. All layers must align with this progression.
+-   **Prompt**: {{{prompt}}}
+    Use this for the overall mood, rhythm, and style (e.g., "dark trap", "emotional piano", "upbeat pop").
 
 {{#if exampleMelodyJSON}}
-Use the following melody ONLY as a high-level inspiration for the general style, mood, and rhythmic density. Do NOT copy the example's specific notes, intervals, or rhythmic patterns. Create a completely new and unique melody that is harmonically grounded in the provided chord progression, but captures a similar feeling to the example.
-Example Melody:
-{{{exampleMelodyJSON}}}
+**Inspiration (Optional):**
+-   Use the following melody ONLY as a high-level inspiration for the style, mood, and rhythmic density of the **top melody**.
+-   Do NOT copy the example's specific notes, intervals, or rhythmic patterns. Create a completely new and unique composition.
+-   Example Melody: {{{exampleMelodyJSON}}}
 {{/if}}
 
-Return a JSON array of melody note objects. Each note object should have the following properties:
+Return a JSON object with three keys: "bassline", "chords", and "melody". Each key should contain an array of note objects. Each note object must have:
 - note: The note name (e.g., C4).
-- start: The start time of the note in beats.
-- duration: The duration of the note in beats. The maximum value for duration is 16.
-- velocity: The velocity of the note (0-127).
-- slide: Whether the note has a slide/portamento effect (boolean).`,
+- start: The start time in beats.
+- duration: The duration in beats.
+- velocity: The velocity (0-127).
+- slide: A boolean for portamento.`,
 });
 
 const generateMelodyFromPromptFlow = ai.defineFlow(
   {
     name: 'generateMelodyFromPromptFlow',
     inputSchema: GenerateMelodyInputSchema,
-    outputSchema: GenerateMelodyOutputSchema,
+    outputSchema: GenerateFullCompositionOutputSchema,
   },
   async ({ prompt, exampleMelody, chordProgression: providedChordProgression }) => {
     let chordProgression = providedChordProgression;
@@ -76,14 +83,23 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     };
 
     const {output} = await generateMelodyPrompt(promptInput);
+    if (!output) {
+      throw new Error("AI failed to generate a composition.");
+    }
     
     // Validate the output to ensure duration is not too long
-    const validatedOutput = output?.filter(note => note.duration <= 16) ?? [];
+    const validateNotes = (notes: MelodyNote[]) => notes.filter(note => note.duration <= 16);
+    
+    const validatedOutput: GenerateFullCompositionOutput = {
+      melody: validateNotes(output.melody),
+      chords: validateNotes(output.chords),
+      bassline: validateNotes(output.bassline),
+    };
     
     return validatedOutput;
   }
 );
 
-export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateMelodyOutput> {
+export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateFullCompositionOutput> {
   return generateMelodyFromPromptFlow(input);
 }

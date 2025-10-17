@@ -8,6 +8,7 @@ export const MelodyNoteSchema = z.object({
   velocity: z.number().describe('The velocity of the note (0-127).'),
   slide: z.boolean().describe('Whether the note has a slide/portamento effect.'),
 });
+export type MelodyNote = z.infer<typeof MelodyNoteSchema>;
 
 export const GenerateMelodyInputSchema = z.object({
   prompt: z.string().describe('A prompt describing the desired melody, including key, tempo, and length (e.g., \'A-minor, tempo 120, 8 bars\').'),
@@ -16,8 +17,13 @@ export const GenerateMelodyInputSchema = z.object({
 });
 export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
 
-export const GenerateMelodyOutputSchema = z.array(MelodyNoteSchema);
-export type GenerateMelodyOutput = z.infer<typeof GenerateMelodyOutputSchema>;
+export const GenerateFullCompositionOutputSchema = z.object({
+    melody: z.array(MelodyNoteSchema).describe('The main melodic line of the composition.'),
+    chords: z.array(MelodyNoteSchema).describe('The chord progression, typically with longer-duration notes providing the harmony.'),
+    bassline: z.array(MelodyNoteSchema).describe('The bass line, typically single notes in a lower octave that follow the root of the chords.')
+});
+export type GenerateFullCompositionOutput = z.infer<typeof GenerateFullCompositionOutputSchema>;
+
 
 export const SuggestChordProgressionsInputSchema = z.object({
   key: z.string().describe('The key to suggest chord progressions for (e.g., C major, A minor).'),
