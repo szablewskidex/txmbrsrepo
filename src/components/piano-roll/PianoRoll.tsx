@@ -40,13 +40,17 @@ export function PianoRoll() {
   // Initialize Tone.js on the client side
   useEffect(() => {
     synthRef.current = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'fmsquare' },
+        oscillator: { type: 'triangle8' },
         envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 }
     }).toDestination();
     // Clean up on unmount
     return () => {
-        synthRef.current?.dispose();
+        if (synthRef.current) {
+            synthRef.current.dispose();
+        }
         Tone.Transport.cancel();
+        scheduledEventsRef.current.forEach(id => Tone.Transport.clear(id));
+        scheduledEventsRef.current = [];
     }
   }, []);
   
@@ -422,3 +426,5 @@ export function PianoRoll() {
     </div>
   );
 }
+
+    
