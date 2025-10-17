@@ -14,7 +14,8 @@ import {
   GenerateFullCompositionOutputSchema,
   type GenerateMelodyInput, 
   type GenerateFullCompositionOutput,
-  MelodyNote
+  MelodyNoteSchema,
+  type MelodyNote,
 } from '@/lib/schemas';
 import { validateAndCorrectMelody, analyzeMelody } from '@/lib/melody-validator';
 
@@ -372,3 +373,5 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
 export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateFullCompositionOutput> {
   return generateMelodyFromPromptFlow(input);
 }
+
+    
