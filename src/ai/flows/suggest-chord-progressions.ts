@@ -15,7 +15,7 @@ import {
 } from '@/lib/schemas';
 
 
-const prompt = ai.definePrompt({
+const suggestChordProgressionsPrompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
   input: {schema: SuggestChordProgressionsInputSchema},
   output: {schema: SuggestChordProgressionsOutputSchema},
@@ -38,13 +38,14 @@ const suggestChordProgressionsFlow = ai.defineFlow(
     outputSchema: SuggestChordProgressionsOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    const {output} = await suggestChordProgressionsPrompt(input);
+    if (!output) {
+      throw new Error("Failed to get chord suggestions from AI.");
+    }
+    return output;
   }
 );
 
 export async function suggestChordProgressions(input: SuggestChordProgressionsInput): Promise<SuggestChordProgressionsOutput> {
   return suggestChordProgressionsFlow(input);
 }
-
-    
