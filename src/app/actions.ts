@@ -1,18 +1,21 @@
 
 'use server';
-import { generateMelodyFromPrompt, GenerateMelodyOutput } from '@/ai/flows/generate-melody-from-prompt';
+import { generateMelodyFromPrompt, GenerateMelodyInput, GenerateMelodyOutput } from '@/ai/flows/generate-melody-from-prompt';
 import { z } from 'zod';
 
-const GenerateMelodyActionInput = z.string().min(1, 'Prompt cannot be empty.');
+const GenerateMelodyActionInput = z.object({
+  prompt: z.string().min(1, 'Prompt cannot be empty.'),
+  exampleMelody: z.array(z.any()).optional(),
+});
 
-export async function generateMelodyAction(prompt: string): Promise<{ data: GenerateMelodyOutput | null; error: string | null; }> {
-  const validation = GenerateMelodyActionInput.safeParse(prompt);
+export async function generateMelodyAction(input: GenerateMelodyInput): Promise<{ data: GenerateMelodyOutput | null; error: string | null; }> {
+  const validation = GenerateMelodyActionInput.safeParse(input);
   if (!validation.success) {
     return { data: null, error: validation.error.flatten().formErrors.join(', ') };
   }
   
   try {
-    const melody = await generateMelodyFromPrompt({ prompt });
+    const melody = await generateMelodyFromPrompt(input);
     return { data: melody, error: null };
   } catch (error) {
     console.error('Error generating melody:', error);

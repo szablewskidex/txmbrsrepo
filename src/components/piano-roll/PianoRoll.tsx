@@ -145,7 +145,7 @@ export function PianoRoll() {
 
       // Assuming default tempo of 120 bpm, 1 beat = 0.5s
       // We will need a more robust time-to-beat conversion if we add tempo controls.
-      const secondsPerBeat = 60 / 120;
+      const secondsPerBeat = 60 / (midi.header.tempos[0]?.bpm || 120);
       const importedNotes = newNotes.map(n => ({
         ...n,
         start: n.start / secondsPerBeat,
@@ -179,9 +179,18 @@ export function PianoRoll() {
     }
   };
 
-  const handleGenerateMelody = async (prompt: string) => {
+  const handleGenerateMelody = async (prompt: string, useExample: boolean) => {
     setIsGenerating(true);
-    const result = await generateMelodyAction(prompt);
+
+    const exampleMelody = useExample ? notes.map(n => ({
+        note: indexToNote(n.pitch),
+        start: n.start,
+        duration: n.duration,
+        velocity: n.velocity,
+        slide: n.slide,
+    })) : undefined;
+
+    const result = await generateMelodyAction({ prompt, exampleMelody });
     
     if (result.error) {
       toast({ variant: "destructive", title: "Błąd AI", description: result.error });

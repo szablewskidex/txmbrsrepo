@@ -21,7 +21,7 @@ interface ControlsPanelProps {
   selectedNote: Note | undefined;
   onRemoveNote: (id: number) => void;
   onUpdateNote: (id: number, patch: Partial<Note>) => void;
-  onGenerateMelody: (prompt: string) => Promise<void>;
+  onGenerateMelody: (prompt: string, useExample: boolean) => Promise<void>;
   isGenerating: boolean;
 }
 
@@ -30,11 +30,12 @@ export function ControlsPanel({
   selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating
 }: ControlsPanelProps) {
   const [prompt, setPrompt] = useState('');
+  const [useExample, setUseExample] = useState(true);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt || isGenerating) return;
-    await onGenerateMelody(prompt);
+    await onGenerateMelody(prompt, useExample);
     setPrompt('');
   };
 
@@ -90,13 +91,17 @@ export function ControlsPanel({
           <CardDescription>Wygeneruj melodię z opisu tekstowego.</CardDescription>
         </CardHeader>
         <form onSubmit={handleGenerate}>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Textarea
               placeholder="np. mroczna melodia trapowa w A-moll, 140 bpm"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               className="min-h-[80px]"
             />
+            <div className="flex items-center space-x-2">
+                <Switch id="use-example-mode" checked={useExample} onCheckedChange={setUseExample} />
+                <Label htmlFor="use-example-mode">Użyj jako przykładu</Label>
+            </div>
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isGenerating || !prompt}>

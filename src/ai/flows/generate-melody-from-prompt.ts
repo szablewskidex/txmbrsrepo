@@ -11,11 +11,6 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const GenerateMelodyInputSchema = z.object({
-  prompt: z.string().describe('A prompt describing the desired melody, including key, tempo, and length (e.g., \'A-minor, tempo 120, 8 bars\').'),
-});
-export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
-
 const MelodyNoteSchema = z.object({
   note: z.string().describe('The note name (e.g., C4).'),
   start: z.number().describe('The start time of the note in beats.'),
@@ -23,6 +18,13 @@ const MelodyNoteSchema = z.object({
   velocity: z.number().describe('The velocity of the note (0-127).'),
   slide: z.boolean().describe('Whether the note has a slide/portamento effect.'),
 });
+
+const GenerateMelodyInputSchema = z.object({
+  prompt: z.string().describe('A prompt describing the desired melody, including key, tempo, and length (e.g., \'A-minor, tempo 120, 8 bars\').'),
+  exampleMelody: z.array(MelodyNoteSchema).optional().describe('An optional example melody to guide the generation.'),
+});
+export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
+
 
 const GenerateMelodyOutputSchema = z.array(MelodyNoteSchema);
 export type GenerateMelodyOutput = z.infer<typeof GenerateMelodyOutputSchema>;
@@ -38,6 +40,13 @@ const generateMelodyPrompt = ai.definePrompt({
   prompt: `You are a melody composer specializing in minor key, dark, and trap melodies. Generate a melody that fits this style based on the following prompt. Return a JSON array of melody note objects.
 
 Prompt: {{{prompt}}}
+
+{{#if exampleMelody}}
+Use the following melody as a strong inspiration for the style, rhythm, and note choices. The generated melody should feel like a continuation or variation of this example.
+
+Example Melody:
+{{{jsonStringify exampleMelody}}}
+{{/if}}
 
 Each note object should have the following properties:
 - note: The note name (e.g., C4).
