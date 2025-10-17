@@ -2,9 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import MidiWriter from 'midi-writer-js';
+import { Midi } from '@tonejs/midi';
 import type { Note, GhostNote } from '@/lib/types';
-import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT, PIANO_KEYS } from '@/lib/constants';
-import { indexToNote, indexToMidiNote, noteToIndex } from '@/lib/music';
+import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
+import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
 import { useToast } from "@/hooks/use-toast";
 import { generateMelodyAction } from '@/app/actions';
 
@@ -26,6 +27,7 @@ export function PianoRoll() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const nextId = useRef(1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -106,6 +108,65 @@ export function PianoRoll() {
         toast({ variant: "destructive", title: "Błąd", description: "Nie udało się skopiować danych JSON." });
     });
   };
+
+  const handleImportMidiClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleMidiFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const midi = new Midi(arrayBuffer);
+      
+      const newNotes: Note[] = [];
+      let maxTime = 0;
+
+      midi.tracks.forEach(track => {
+        track.notes.forEach(note => {
+            const pitchName = midiToNoteName(note.midi);
+            const pitchIndex = noteToIndex(pitchName);
+
+            if (pitchIndex !== -1) {
+                newNotes.push({
+                    id: nextId.current++,
+                    start: note.time, // time is in seconds, convert to beats
+                    duration: note.duration,
+                    pitch: pitchIndex,
+                    velocity: Math.round(note.velocity * 127),
+                    slide: false,
+                });
+                maxTime = Math.max(maxTime, note.time + note.duration);
+            }
+        });
+      });
+
+      // Assuming default tempo of 120 bpm, 1 beat = 0.5s
+      // We will need a more robust time-to-beat conversion if we add tempo controls.
+      const secondsPerBeat = 60 / 120;
+      const importedNotes = newNotes.map(n => ({
+        ...n,
+        start: n.start / secondsPerBeat,
+        duration: n.duration / secondsPerBeat,
+      }));
+
+      const newBeats = Math.ceil(maxTime / secondsPerBeat / 4) * 4;
+      setBeats(Math.max(DEFAULT_BEATS, newBeats));
+      setNotes(importedNotes);
+      toast({ title: "MIDI Zaimportowane", description: "Twoja kompozycja została załadowana." });
+
+    } catch (error) {
+      console.error("Error parsing MIDI file:", error);
+      toast({ variant: "destructive", title: "Błąd Importu", description: "Nie udało się przetworzyć pliku MIDI." });
+    } finally {
+        // Reset file input
+        if(event.target) {
+            event.target.value = '';
+        }
+    }
+  };
   
   const toggleGhostExample = () => {
     if (ghostNotes.length > 0) {
@@ -152,9 +213,17 @@ export function PianoRoll() {
 
   return (
     <div className="flex flex-col h-full w-full font-body bg-background text-foreground">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleMidiFileChange}
+        accept=".mid,.midi"
+        className="hidden"
+      />
       <Toolbar
         isPlaying={isPlaying}
         onPlayToggle={() => setIsPlaying(p => !p)}
+        onImportMidiClick={handleImportMidiClick}
         onExportMidi={exportMidi}
         onExportJson={exportJson}
         onToggleGhost={toggleGhostExample}
