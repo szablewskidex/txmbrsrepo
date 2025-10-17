@@ -257,8 +257,8 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                const startInBeats = (note.ticks / ppq);
-                const durationInBeats = (note.durationTicks / ppq);
+                const startInBeats = note.ticks / ppq;
+                const durationInBeats = note.durationTicks / ppq;
 
                 newNotes.push({
                     id: nextId.current++,
@@ -337,12 +337,11 @@ export function PianoRoll() {
     startProgress();
   
     try {
+        let result;
         if (youtubeUrl) {
-            const result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
+            result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
             if (result.error) {
                 toast({ variant: "destructive", title: "Błąd Analizy YouTube", description: result.error });
-            } else {
-                processAndSetNotes(result.data);
             }
         } else {
             const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
@@ -359,17 +358,24 @@ export function PianoRoll() {
                 slide: n.slide,
             })) : undefined;
           
-            const result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
+            result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
             
             if (result.error) {
               toast({ variant: "destructive", title: "Błąd AI", description: result.error });
-            } else {
-                processAndSetNotes(result.data);
             }
         }
+        
+        if (result && !result.error) {
+            processAndSetNotes(result.data);
+        }
+
     } finally {
         stopProgress();
-        setIsGenerating(false);
+        // Give a moment for the 100% to show before hiding the overlay
+        setTimeout(() => {
+            setIsGenerating(false);
+            resetProgress();
+        }, 500);
     }
   };
 

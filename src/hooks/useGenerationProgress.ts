@@ -34,16 +34,21 @@ export function useGenerationProgress() {
         }
     }
 
-    if (currentStageIndex === -1) {
-      // Process finished or something went wrong
-      setProgress(100);
-      setStatus('Gotowe!');
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      setIsRunning(false);
-      return;
+    if (currentStageIndex === -1 && isRunning) {
+        // We've finished the simulation, but the process is still running.
+        // Hold at 99%
+        setProgress(99);
+        setStatus('Finalizowanie...');
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null; // No need to run this anymore
+        }
+        return;
+    } else if (currentStageIndex === -1 && !isRunning) {
+        // Process is fully stopped
+        return;
     }
+
 
     const currentStage = STAGES[currentStageIndex];
     const stageStartTime = cumulativeDuration - currentStage.duration;
@@ -57,10 +62,11 @@ export function useGenerationProgress() {
     
     const overallProgress = progressSoFar + stageProgress * currentStage.progressShare;
 
+    // Cap the simulated progress at 99 to wait for the final `stop` call
     setProgress(Math.min(99, overallProgress));
     setStatus(currentStage.name);
 
-  }, []);
+  }, [isRunning]);
 
   const start = useCallback(() => {
     if (isRunning) return;
@@ -70,20 +76,24 @@ export function useGenerationProgress() {
   }, [isRunning, updateProgress]);
 
   const stop = useCallback(() => {
-    if (!isRunning) return;
     setIsRunning(false);
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     setProgress(100);
     setStatus('Gotowe!');
-  }, [isRunning]);
+  }, []);
 
   const reset = useCallback(() => {
-    stop();
+    if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+    }
+    setIsRunning(false);
     setProgress(0);
     setStatus('');
-  }, [stop]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
