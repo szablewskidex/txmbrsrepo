@@ -211,8 +211,12 @@ export function PianoRoll() {
         };
       }).filter((n): n is Note => n !== null);
       
-      setNotes(prev => [...prev, ...aiNotes]);
-      toast({ title: "Melodia Wygenerowana", description: "AI dodało nowe nuty do Twojej kompozycji." });
+      if (useExample) {
+        setNotes(aiNotes);
+      } else {
+        setNotes(prev => [...prev, ...aiNotes]);
+      }
+      toast({ title: "Melodia Wygenerowana", description: "AI stworzyło nową kompozycję." });
     }
     
     setIsGenerating(false);
