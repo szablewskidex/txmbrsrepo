@@ -62,13 +62,25 @@ async function getCachedChordProgressions(key: string): Promise<string[]> {
   }
   
   console.log(`Cache miss for key: ${key}. Fetching from AI...`);
-  const suggestions = await suggestChordProgressionsFlow({ key });
-  chordProgressionCache.set(key, { 
-    data: suggestions.chordProgressions, 
-    timestamp: now 
-  });
-  
-  return suggestions.chordProgressions;
+  try {
+    const suggestions = await suggestChordProgressionsFlow({ key });
+    
+    if (suggestions && suggestions.chordProgressions.length > 0) {
+      chordProgressionCache.set(key, { 
+        data: suggestions.chordProgressions, 
+        timestamp: now 
+      });
+      return suggestions.chordProgressions;
+    }
+    
+    // If AI returns no suggestions, return empty and don't cache
+    return [];
+
+  } catch (error) {
+      console.error(`[SUGGEST_CHORDS] Error fetching suggestions for key "${key}":`, error);
+      // In case of an error, return an empty array to prevent crashing the main flow
+      return [];
+  }
 }
 
 
