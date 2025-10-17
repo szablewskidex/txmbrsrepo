@@ -95,7 +95,9 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
 
     const {output} = await generateMelodyPrompt(promptInput);
     
+    // Validate the output to ensure duration is not too long
     const validatedOutput = output?.filter(note => note.duration <= 16) ?? [];
+    
     return validatedOutput;
   }
 );
