@@ -46,7 +46,8 @@ const suggestChordProgressionsFlow = ai.defineFlow(
   async input => {
     const {output} = await suggestChordProgressionsPrompt(input);
     if (!output) {
-      throw new Error("Failed to get chord suggestions from AI.");
+      // Return a valid empty output instead of undefined
+      return { chordProgressions: [] };
     }
     return output;
   }
@@ -65,7 +66,8 @@ async function getCachedChordProgressions(key: string): Promise<string[]> {
   try {
     const suggestions = await suggestChordProgressionsFlow({ key });
     
-    if (suggestions && suggestions.chordProgressions.length > 0) {
+    // Robust check to prevent crash
+    if (suggestions && suggestions.chordProgressions && suggestions.chordProgressions.length > 0) {
       chordProgressionCache.set(key, { 
         data: suggestions.chordProgressions, 
         timestamp: now 
@@ -73,12 +75,13 @@ async function getCachedChordProgressions(key: string): Promise<string[]> {
       return suggestions.chordProgressions;
     }
     
-    // If AI returns no suggestions, return empty and don't cache
+    // If AI returns no suggestions, or an invalid format, return empty and don't cache
+    console.warn(`[SUGGEST_CHORDS] AI returned no valid suggestions for key "${key}".`);
     return [];
 
   } catch (error) {
       console.error(`[SUGGEST_CHORDS] Error fetching suggestions for key "${key}":`, error);
-      // In case of an error, return an empty array to prevent crashing the main flow
+      // In case of any error, return an empty array to prevent crashing the main flow
       return [];
   }
 }
