@@ -36,8 +36,6 @@ export function PianoRoll() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const scheduledEventsRef = useRef<number[]>([]);
-  const horizontalScrollRef = useRef<HTMLDivElement>(null);
-  const verticalScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
   const beats = measures * 4;
@@ -170,19 +168,30 @@ export function PianoRoll() {
 
 
   const exportMidi = () => {
-    const bpm = (Tone.Transport.bpm.value > 0) ? Tone.Transport.bpm.value : 120;
+    const bpm = Tone.Transport.bpm.value > 0 ? Tone.Transport.bpm.value : 120;
     const track = new MidiWriter.Track();
     track.setTempo(bpm);
     track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
     
     const sortedNotes = [...notes].sort((a, b) => a.start - b.start);
 
+    // Pulses per quarter note (standard resolution)
+    const PPQ = 960;
+
     sortedNotes.forEach(note => {
-        const duration = note.duration > 0 ? `T${MidiWriter.Utils.getTickDuration(note.duration, bpm)}` : 'T1';
+        // Calculate ticks for start and duration
+        const startInTicks = note.start * PPQ;
+        const durationInTicks = note.duration * PPQ;
+
+        // Ensure duration is a finite, positive number.
+        const durationString = (note.duration > 0 && Number.isFinite(durationInTicks) && durationInTicks > 0) 
+            ? `T${Math.floor(durationInTicks)}` 
+            : 'T1'; // Fallback to a minimal duration if invalid
+
         track.addEvent(new MidiWriter.NoteEvent({
             pitch: [indexToMidiNote(note.pitch as number)],
-            duration: duration,
-            startTick: MidiWriter.Utils.getTickDuration(note.start, bpm),
+            duration: durationString,
+            startTick: Math.floor(startInTicks),
             velocity: Math.round(note.velocity / 127 * 100),
         }));
     });
@@ -238,8 +247,8 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                const startInBeats = note.time * (bpm / 60);
-                const durationInBeats = note.duration * (bpm / 60);
+                const startInBeats = note.time / (midi.header.ppq / (bpm / 60)); // Correct conversion
+                const durationInBeats = note.duration / (midi.header.ppq / (bpm / 60)); // Correct conversion
 
                 newNotes.push({
                     id: nextId.current++,
@@ -384,7 +393,6 @@ export function PianoRoll() {
                 <ScrollArea
                   className="flex-grow overflow-auto"
                   style={{ height: 'calc(100vh - 14rem)' }}
-                  viewportRef={verticalScrollRef}
                 >
                   <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
                   <Grid
@@ -432,3 +440,5 @@ export function PianoRoll() {
     </div>
   );
 }
+
+    
