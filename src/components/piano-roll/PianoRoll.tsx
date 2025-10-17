@@ -17,6 +17,7 @@ import { PianoKeys } from './PianoKeys';
 import { Grid } from './Grid';
 import { ControlsPanel } from './ControlsPanel';
 import { EventEditor } from './EventEditor';
+import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 
 export function PianoRoll() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -39,14 +40,19 @@ export function PianoRoll() {
   
   // Initialize Tone.js on the client side
   useEffect(() => {
-    synthRef.current = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'triangle8' },
-        envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 }
-    }).toDestination();
+    if (typeof window !== 'undefined') {
+        synthRef.current = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'triangle8' },
+            envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 }
+        }).toDestination();
+    }
     // Clean up on unmount
     return () => {
         if (synthRef.current) {
             synthRef.current.dispose();
+        }
+        if (Tone.Transport.state !== 'stopped') {
+            Tone.Transport.stop();
         }
         Tone.Transport.cancel();
         scheduledEventsRef.current.forEach(id => Tone.Transport.clear(id));
@@ -386,27 +392,32 @@ export function PianoRoll() {
         onToggleGhost={toggleGhostExample}
       />
       <div className="flex flex-1 overflow-hidden">
-        <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Grid
-            notes={notes}
-            ghostNotes={ghostNotes}
-            beats={beats}
-            cellPx={cellPx}
-            verticalZoom={verticalZoom}
-            playPosition={playPosition}
-            onAddNote={addNote}
-            onUpdateNote={updateNote}
-            getNote={getNote}
-            selectedNoteId={selectedNoteId}
-            onSelectNote={setSelectedNoteId}
-          />
-          <EventEditor
-            notes={notes}
-            selectedNoteId={selectedNoteId}
-            onUpdateNote={updateNote}
-            cellPx={cellPx}
-          />
+            <ScrollArea className="flex-1" type="always">
+                <div className="flex relative">
+                    <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
+                    <Grid
+                        notes={notes}
+                        ghostNotes={ghostNotes}
+                        beats={beats}
+                        cellPx={cellPx}
+                        verticalZoom={verticalZoom}
+                        playPosition={playPosition}
+                        onAddNote={addNote}
+                        onUpdateNote={updateNote}
+                        getNote={getNote}
+                        selectedNoteId={selectedNoteId}
+                        onSelectNote={setSelectedNoteId}
+                    />
+                </div>
+                <ScrollBar orientation="horizontal" />
+            </ScrollArea>
+            <EventEditor
+                notes={notes}
+                selectedNoteId={selectedNoteId}
+                onUpdateNote={updateNote}
+                cellPx={cellPx}
+            />
         </div>
         <ControlsPanel
           beats={beats}

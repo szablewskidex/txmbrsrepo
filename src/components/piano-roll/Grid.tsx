@@ -90,6 +90,10 @@ export function Grid({
     if (e.target !== gridRef.current) return; // Only trigger on grid background
     if (!gridRef.current) return;
     
+    // Get scroll offset of the container
+    const scrollableContainer = gridRef.current.parentElement?.parentElement;
+    if (!scrollableContainer) return;
+    
     const rect = gridRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -106,50 +110,54 @@ export function Grid({
   const gridHeight = PIANO_KEYS.length * ROW_HEIGHT * verticalZoom;
 
   return (
-    <div className="flex-1 relative overflow-auto bg-background" onClick={() => onSelectNote(null)}>
-      <div
+    <div
         ref={gridRef}
-        className="relative"
+        className="relative bg-background"
         style={{
-          width: gridWidth,
-          height: gridHeight,
-          backgroundSize: `${cellPx}px ${ROW_HEIGHT * verticalZoom}px`,
-          backgroundImage: `
+        width: gridWidth,
+        height: gridHeight,
+        backgroundSize: `${cellPx}px ${ROW_HEIGHT * verticalZoom}px`,
+        backgroundImage: `
             linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
             linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)
-          `,
+        `,
         }}
         onClick={handleGridClick}
-      >
+        onMouseDown={(e) => {
+          // Deselect note when clicking on grid background
+          if (e.target === gridRef.current) {
+            onSelectNote(null);
+          }
+        }}
+    >
         <div
-          className="absolute top-0 w-0.5 bg-accent/70 z-20"
-          style={{ left: playPosition * cellPx, height: gridHeight }}
+            className="absolute top-0 w-0.5 bg-accent/70 z-20"
+            style={{ left: playPosition * cellPx, height: gridHeight }}
         />
 
         {ghostNotes.map((note, i) => (
-          <div
+            <div
             key={`g-${i}`}
             className="absolute bg-primary/20 rounded-sm"
             style={{
-              left: note.start * cellPx,
-              top: (PIANO_KEYS.length - 1 - note.pitch) * ROW_HEIGHT * verticalZoom,
-              width: note.duration * cellPx,
-              height: ROW_HEIGHT * verticalZoom,
+                left: note.start * cellPx,
+                top: (PIANO_KEYS.length - 1 - note.pitch) * ROW_HEIGHT * verticalZoom,
+                width: note.duration * cellPx,
+                height: ROW_HEIGHT * verticalZoom,
             }}
-          />
+            />
         ))}
 
         {notes.map(note => (
-          <NoteItem
+            <NoteItem
             key={note.id}
             note={note}
             cellPx={cellPx}
             verticalZoom={verticalZoom}
             isSelected={note.id === selectedNoteId}
             onMouseDown={handleNoteMouseDown}
-          />
+            />
         ))}
-      </div>
     </div>
   );
 }
