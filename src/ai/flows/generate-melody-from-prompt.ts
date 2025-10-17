@@ -1,3 +1,4 @@
+
 // src/ai/flows/generate-melody-from-prompt.ts
 'use server';
 /**
@@ -47,7 +48,7 @@ const generateMelodyPrompt = ai.definePrompt({
 Prompt: {{{prompt}}}
 
 {{#if exampleMelodyJSON}}
-Use the following melody as a strong inspiration for the style, rhythm, and note choices. The generated melody should feel like a continuation or variation of this example.
+Use the following melody as inspiration for the general style, mood, and rhythmic patterns. Do not copy the example melody. Instead, create a completely new and unique melody that captures a similar feeling.
 
 Example Melody:
 {{{exampleMelodyJSON}}}
