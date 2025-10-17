@@ -34,7 +34,7 @@ const generateMelodyPrompt = ai.definePrompt({
 The composition MUST adhere to the principles of music theory. The notes you choose must complement the underlying harmony of the chord progression.
 
 **Length and Structure:**
-- The composition MUST be exactly 8 bars long (beats 0 to 32).
+- The composition MUST be exactly 8 bars long (beats 0 to 32). All layers (bass, chords, melody) must span this full duration.
 - The melody should evolve over time. Create a sense of progression by introducing variations and repeating motifs. Avoid making it a simple 2 or 4-bar loop. Think in terms of a short A and B section if possible.
 
 **Layers:**
@@ -81,7 +81,9 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
         const randomIndex = Math.floor(Math.random() * chordSuggestions.chordProgressions.length);
         chordProgression = chordSuggestions.chordProgressions[randomIndex];
       } else {
-        chordProgression = 'Am-G-C-F'; // Fallback
+        // This fallback should ideally not be hit if suggestChordProgressions is reliable.
+        // If it is, it might default to a key that doesn't match the prompt.
+        chordProgression = 'Am-G-C-F'; 
       }
     }
     
@@ -97,7 +99,7 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     }
     
     // Validate the output to ensure duration is not too long
-    const validateNotes = (notes: MelodyNote[]) => notes.filter(note => note.duration <= 16);
+    const validateNotes = (notes: MelodyNote[]) => notes.filter(note => note.duration <= 32);
     
     const validatedOutput: GenerateFullCompositionOutput = {
       melody: validateNotes(output.melody),
