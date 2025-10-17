@@ -163,6 +163,7 @@ export function PianoRoll() {
     
     // Schedule new events
     notes.forEach(note => {
+      if (note.duration > 0) {
         const noteName = indexToNote(note.pitch as number);
         // Convert beats to Tone.Time notation (e.g. "4n", "8n")
         const time = Tone.Time(note.start, "i").toNotation(); 
@@ -172,6 +173,7 @@ export function PianoRoll() {
             synth.triggerAttackRelease(noteName, duration, t, note.velocity / 127);
         }, time);
         scheduledEventsRef.current.push(eventId);
+      }
     });
   }, [notes]);
   
@@ -203,19 +205,19 @@ export function PianoRoll() {
     const PPQ = 960; // Pulses per quarter note
 
     sortedNotes.forEach(note => {
-        const startInTicks = note.start * PPQ;
-        const durationInTicks = note.duration * PPQ;
-
-        const durationString = (note.duration > 0 && Number.isFinite(durationInTicks) && durationInTicks > 0) 
-            ? `T${Math.floor(durationInTicks)}` 
-            : 'T1';
-
-        track.addEvent(new MidiWriter.NoteEvent({
-            pitch: [indexToMidiNote(note.pitch as number)],
-            duration: durationString,
-            startTick: Math.floor(startInTicks),
-            velocity: Math.round(note.velocity / 127 * 100),
-        }));
+        if (note.duration > 0) {
+            const startInTicks = note.start * PPQ;
+            const durationInTicks = note.duration * PPQ;
+    
+            const durationString = `T${Math.floor(durationInTicks)}`;
+    
+            track.addEvent(new MidiWriter.NoteEvent({
+                pitch: [indexToMidiNote(note.pitch as number)],
+                duration: durationString,
+                startTick: Math.floor(startInTicks),
+                velocity: Math.round(note.velocity / 127 * 100),
+            }));
+        }
     });
 
     const write = new MidiWriter.Writer([track]);
@@ -492,4 +494,5 @@ export function PianoRoll() {
   );
 }
 
+    
     
