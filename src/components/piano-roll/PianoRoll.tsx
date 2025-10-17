@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -18,6 +17,7 @@ import { Grid } from './Grid';
 import { ControlsPanel } from './ControlsPanel';
 import { EventEditor } from './EventEditor';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
+import { Timeline } from './Timeline';
 
 export function PianoRoll() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -36,6 +36,8 @@ export function PianoRoll() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const scheduledEventsRef = useRef<number[]>([]);
+  const horizontalScrollRef = useRef<HTMLDivElement>(null);
+  const verticalScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
   // Initialize Tone.js on the client side
@@ -184,7 +186,7 @@ export function PianoRoll() {
     a.href = dataUri;
     a.download = 'pianoroll-export.mid';
     document.body.appendChild(a);
-a.click();
+    a.click();
     document.body.removeChild(a);
     toast({ title: "MIDI Eksportowane", description: "Twoja kompozycja została pobrana." });
   };
@@ -366,31 +368,45 @@ a.click();
       />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
-            <ScrollArea className="flex-1" type="always">
-                <div className="flex relative">
-                    <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
-                    <Grid
-                        notes={notes}
-                        ghostNotes={ghostNotes}
-                        beats={beats}
-                        cellPx={cellPx}
-                        verticalZoom={verticalZoom}
-                        playPosition={playPosition}
-                        onAddNote={addNote}
-                        onUpdateNote={updateNote}
-                        getNote={getNote}
-                        selectedNoteId={selectedNoteId}
-                        onSelectNote={setSelectedNoteId}
-                    />
+          <div className="flex-1 flex flex-col">
+            <ScrollArea className="flex-grow" type="always">
+              <div className="flex">
+                <div className="w-20 shrink-0 sticky left-0 z-30 bg-card border-r" />
+                <div className="flex-grow">
+                  <Timeline beats={beats} cellPx={cellPx} />
                 </div>
-                <ScrollBar orientation="horizontal" />
+              </div>
+              <div className="flex relative">
+                <ScrollArea
+                  className="flex-grow overflow-auto"
+                  style={{ height: 'calc(100vh - 14rem)' }}
+                  viewportRef={verticalScrollRef}
+                >
+                  <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
+                  <Grid
+                    notes={notes}
+                    ghostNotes={ghostNotes}
+                    beats={beats}
+                    cellPx={cellPx}
+                    verticalZoom={verticalZoom}
+                    playPosition={playPosition}
+                    onAddNote={addNote}
+                    onUpdateNote={updateNote}
+                    getNote={getNote}
+                    selectedNoteId={selectedNoteId}
+                    onSelectNote={setSelectedNoteId}
+                  />
+                </ScrollArea>
+              </div>
+              <ScrollBar orientation="horizontal" />
             </ScrollArea>
-            <EventEditor
-                notes={notes}
-                selectedNoteId={selectedNoteId}
-                onUpdateNote={updateNote}
-                cellPx={cellPx}
-            />
+          </div>
+          <EventEditor
+            notes={notes}
+            selectedNoteId={selectedNoteId}
+            onUpdateNote={updateNote}
+            cellPx={cellPx}
+          />
         </div>
         <ControlsPanel
           beats={beats}
@@ -412,5 +428,3 @@ a.click();
     </div>
   );
 }
-
-    

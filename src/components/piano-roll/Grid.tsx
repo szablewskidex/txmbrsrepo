@@ -111,53 +111,55 @@ export function Grid({
 
   return (
     <div
-        ref={gridRef}
-        className="relative bg-background"
-        style={{
+      ref={gridRef}
+      className="absolute left-20 top-0 bg-background"
+      style={{
         width: gridWidth,
         height: gridHeight,
-        backgroundSize: `${cellPx}px ${ROW_HEIGHT * verticalZoom}px`,
+        backgroundSize: `${cellPx * 4}px ${ROW_HEIGHT * verticalZoom * 12}px, ${cellPx}px ${ROW_HEIGHT * verticalZoom}px`,
         backgroundImage: `
-            linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
-            linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)
+          linear-gradient(to right, hsl(var(--border) / 0.7) 1px, transparent 1px),
+          linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px),
+          linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+          linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)
         `,
-        }}
-        onClick={handleGridClick}
-        onMouseDown={(e) => {
-          // Deselect note when clicking on grid background
-          if (e.target === gridRef.current) {
-            onSelectNote(null);
-          }
-        }}
+      }}
+      onClick={handleGridClick}
+      onMouseDown={(e) => {
+        // Deselect note when clicking on grid background
+        if (e.target === gridRef.current) {
+          onSelectNote(null);
+        }
+      }}
     >
+      <div
+        className="absolute top-0 w-0.5 bg-accent/70 z-20"
+        style={{ left: playPosition * cellPx, height: gridHeight }}
+      />
+
+      {ghostNotes.map((note, i) => (
         <div
-            className="absolute top-0 w-0.5 bg-accent/70 z-20"
-            style={{ left: playPosition * cellPx, height: gridHeight }}
+          key={`g-${i}`}
+          className="absolute bg-primary/20 rounded-sm"
+          style={{
+            left: note.start * cellPx,
+            top: (PIANO_KEYS.length - 1 - note.pitch) * ROW_HEIGHT * verticalZoom,
+            width: note.duration * cellPx,
+            height: ROW_HEIGHT * verticalZoom,
+          }}
         />
+      ))}
 
-        {ghostNotes.map((note, i) => (
-            <div
-            key={`g-${i}`}
-            className="absolute bg-primary/20 rounded-sm"
-            style={{
-                left: note.start * cellPx,
-                top: (PIANO_KEYS.length - 1 - note.pitch) * ROW_HEIGHT * verticalZoom,
-                width: note.duration * cellPx,
-                height: ROW_HEIGHT * verticalZoom,
-            }}
-            />
-        ))}
-
-        {notes.map(note => (
-            <NoteItem
-            key={note.id}
-            note={note}
-            cellPx={cellPx}
-            verticalZoom={verticalZoom}
-            isSelected={note.id === selectedNoteId}
-            onMouseDown={handleNoteMouseDown}
-            />
-        ))}
+      {notes.map(note => (
+        <NoteItem
+          key={note.id}
+          note={note}
+          cellPx={cellPx}
+          verticalZoom={verticalZoom}
+          isSelected={note.id === selectedNoteId}
+          onMouseDown={handleNoteMouseDown}
+        />
+      ))}
     </div>
   );
 }
