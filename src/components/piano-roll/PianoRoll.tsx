@@ -7,7 +7,7 @@ import type { Note, GhostNote } from '@/lib/types';
 import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
 import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
 import { useToast } from "@/hooks/use-toast";
-import { generateMelodyAction } from '@/app/actions';
+import { generateMelodyAction, suggestChordProgressionsAction } from '@/app/actions';
 
 import { Toolbar } from './Toolbar';
 import { PianoKeys } from './PianoKeys';
@@ -25,6 +25,9 @@ export function PianoRoll() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playPosition, setPlayPosition] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [chordProgressions, setChordProgressions] = useState<string[]>([]);
+  const [currentKey, setCurrentKey] = useState('A minor');
+
 
   const nextId = useRef(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +44,24 @@ export function PianoRoll() {
     }
     return () => cancelAnimationFrame(animationFrameId);
   }, [isPlaying, beats]);
+
+   // Fetch chord progressions when the key changes
+   useEffect(() => {
+    const fetchChords = async () => {
+      const result = await suggestChordProgressionsAction({ key: currentKey });
+      if (result.data) {
+        setChordProgressions(result.data.chordProgressions);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Błąd przy pobieraniu akordów",
+          description: result.error || "Nieznany błąd",
+        });
+      }
+    };
+    fetchChords();
+  }, [currentKey, toast]);
+
 
   const addNote = useCallback((start: number, pitch: number) => {
     const id = nextId.current++;
@@ -179,9 +200,16 @@ export function PianoRoll() {
     }
   };
 
-  const handleGenerateMelody = async (prompt: string, useExample: boolean) => {
+  const handleGenerateMelody = async (prompt: string, useExample: boolean, chordProgression?: string) => {
     setIsGenerating(true);
-
+  
+    // Extract key from prompt to suggest chords if needed, or to inform the AI
+    const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
+    const key = keyMatch ? keyMatch[0] : currentKey;
+    if (key !== currentKey) {
+      setCurrentKey(key);
+    }
+  
     const exampleMelody = useExample ? notes.map(n => ({
         note: indexToNote(n.pitch),
         start: n.start,
@@ -189,8 +217,8 @@ export function PianoRoll() {
         velocity: n.velocity,
         slide: n.slide,
     })) : undefined;
-
-    const result = await generateMelodyAction({ prompt, exampleMelody });
+  
+    const result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
     
     if (result.error) {
       toast({ variant: "destructive", title: "Błąd AI", description: result.error });
@@ -276,6 +304,7 @@ export function PianoRoll() {
           onUpdateNote={updateNote}
           onGenerateMelody={handleGenerateMelody}
           isGenerating={isGenerating}
+          chordProgressions={chordProgressions}
         />
       </div>
     </div>

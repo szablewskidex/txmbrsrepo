@@ -24,6 +24,7 @@ const MelodyNoteSchema = z.object({
 const GenerateMelodyInputSchema = z.object({
   prompt: z.string().describe('A prompt describing the desired melody, including key, tempo, and length (e.g., \'A-minor, tempo 120, 8 bars\').'),
   exampleMelody: z.array(MelodyNoteSchema).optional().describe('An optional example melody to guide the generation.'),
+  chordProgression: z.string().optional().describe('A specific chord progression to base the melody on (e.g., "Am-G-C-F").'),
 });
 export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
 
@@ -45,15 +46,18 @@ const generateMelodyPrompt = ai.definePrompt({
   name: 'generateMelodyPrompt',
   input: {schema: InternalPromptInputSchema},
   output: {schema: GenerateMelodyOutputSchema},
-  prompt: `You are an expert music composer and theorist specializing in minor key, dark, and trap melodies. Your task is to generate a musically coherent melody based on a prompt and a given chord progression.
+  prompt: `You are an expert music composer and theorist specializing in minor key, dark, and trap melodies. Your task is to generate a musically coherent and compelling melody based on a prompt and a given chord progression.
 
-The melody must adhere to the principles of music theory. The notes you choose should complement the underlying harmony of the chord progression.
+The melody MUST adhere to the principles of music theory. The notes you choose must complement the underlying harmony of the chord progression. Use passing tones, arpeggios, and scale runs to create a fluid and interesting melodic line.
 
 Chord Progression: {{{chordProgression}}}
+This is the harmonic foundation. The melody notes at any given point should sound good when played over the current chord.
+
 Prompt: {{{prompt}}}
+Use this for the overall mood, rhythm, and style.
 
 {{#if exampleMelodyJSON}}
-Use the following melody as inspiration for the general style, mood, and rhythmic patterns. Do not copy the example melody. Instead, create a completely new and unique melody that captures a similar feeling but is harmonically grounded in the provided chord progression.
+Use the following melody ONLY as a high-level inspiration for the general style, mood, and rhythmic density. Do NOT copy the example's specific notes, intervals, or rhythmic patterns. Create a completely new and unique melody that is harmonically grounded in the provided chord progression, but captures a similar feeling to the example.
 Example Melody:
 {{{exampleMelodyJSON}}}
 {{/if}}
@@ -72,28 +76,25 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     inputSchema: GenerateMelodyInputSchema,
     outputSchema: GenerateMelodyOutputSchema,
   },
-  async ({ prompt, exampleMelody }) => {
-    // 1. Extract key from prompt to suggest chords.
-    // A simple regex to find a key like 'A minor', 'C# major', etc.
-    const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
-    const key = keyMatch ? keyMatch[0] : 'A minor'; // Default to A minor if not found
+  async ({ prompt, exampleMelody, chordProgression: providedChordProgression }) => {
+    let chordProgression = providedChordProgression;
 
-    // 2. Get chord progression suggestions.
-    const chordSuggestions = await suggestChordProgressions({ key });
-    // Pick the first suggestion for simplicity.
-    const chordProgression = chordSuggestions.chordProgressions[0] || 'Am-G-C-F';
-
-    // 3. Prepare the input for the main melody generation prompt.
+    // If no chord progression is provided, get one.
+    if (!chordProgression) {
+      const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
+      const key = keyMatch ? keyMatch[0] : 'A minor';
+      const chordSuggestions = await suggestChordProgressions({ key });
+      chordProgression = chordSuggestions.chordProgressions[0] || 'Am-G-C-F';
+    }
+    
     const promptInput: z.infer<typeof InternalPromptInputSchema> = {
       prompt,
       chordProgression,
       exampleMelodyJSON: exampleMelody ? JSON.stringify(exampleMelody, null, 2) : undefined,
     };
 
-    // 4. Generate the melody.
     const {output} = await generateMelodyPrompt(promptInput);
     
-    // 5. Validate the output.
     const validatedOutput = output?.filter(note => note.duration <= 16) ?? [];
     return validatedOutput;
   }

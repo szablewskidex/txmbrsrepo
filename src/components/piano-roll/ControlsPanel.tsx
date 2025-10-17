@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Note } from '@/lib/types';
 import { indexToNote } from '@/lib/music';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sparkles, Trash2 } from 'lucide-react';
 
 interface ControlsPanelProps {
@@ -21,26 +22,34 @@ interface ControlsPanelProps {
   selectedNote: Note | undefined;
   onRemoveNote: (id: number) => void;
   onUpdateNote: (id: number, patch: Partial<Note>) => void;
-  onGenerateMelody: (prompt: string, useExample: boolean) => Promise<void>;
+  onGenerateMelody: (prompt: string, useExample: boolean, chordProgression?: string) => Promise<void>;
   isGenerating: boolean;
+  chordProgressions: string[];
 }
 
 export function ControlsPanel({
   beats, setBeats, cellPx, setCellPx, verticalZoom, setVerticalZoom,
-  selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating
+  selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating,
+  chordProgressions
 }: ControlsPanelProps) {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState('dark trap melody in A-minor, 140 bpm');
   const [useExample, setUseExample] = useState(true);
+  const [selectedChordProgression, setSelectedChordProgression] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (chordProgressions.length > 0) {
+      setSelectedChordProgression(chordProgressions[0]);
+    }
+  }, [chordProgressions]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt || isGenerating) return;
-    await onGenerateMelody(prompt, useExample);
-    setPrompt('');
+    await onGenerateMelody(prompt, useExample, selectedChordProgression);
   };
 
   return (
-    <div className="w-64 bg-card border-l p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
+    <div className="w-80 bg-card border-l p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
       <Card>
         <CardHeader>
           <CardTitle>Ustawienia siatki</CardTitle>
@@ -98,6 +107,19 @@ export function ControlsPanel({
               onChange={(e) => setPrompt(e.target.value)}
               className="min-h-[80px]"
             />
+             <div className="space-y-2">
+              <Label>Progresja Akordów</Label>
+              <Select onValueChange={setSelectedChordProgression} value={selectedChordProgression}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Wybierz progresję..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {chordProgressions.map((prog, i) => (
+                    <SelectItem key={i} value={prog}>{prog}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center space-x-2">
                 <Switch id="use-example-mode" checked={useExample} onCheckedChange={setUseExample} />
                 <Label htmlFor="use-example-mode">Użyj jako przykładu</Label>
