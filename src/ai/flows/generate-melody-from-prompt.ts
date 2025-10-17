@@ -68,12 +68,17 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
   async ({ prompt, exampleMelody, chordProgression: providedChordProgression }) => {
     let chordProgression = providedChordProgression;
 
-    // If no chord progression is provided, get one.
+    // If no chord progression is provided, get one and pick a random one.
     if (!chordProgression) {
       const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
       const key = keyMatch ? keyMatch[0] : 'A minor';
       const chordSuggestions = await suggestChordProgressions({ key });
-      chordProgression = chordSuggestions.chordProgressions[0] || 'Am-G-C-F';
+      if (chordSuggestions.chordProgressions.length > 0) {
+        const randomIndex = Math.floor(Math.random() * chordSuggestions.chordProgressions.length);
+        chordProgression = chordSuggestions.chordProgressions[randomIndex];
+      } else {
+        chordProgression = 'Am-G-C-F'; // Fallback
+      }
     }
     
     const promptInput: z.infer<typeof InternalPromptInputSchema> = {
