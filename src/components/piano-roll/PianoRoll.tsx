@@ -10,6 +10,7 @@ import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib
 import { useToast } from "@/hooks/use-toast";
 import { generateMelodyAction, suggestChordProgressionsAction, analyzeAndGenerateAction } from '@/app/actions';
 import type { GenerateFullCompositionOutput, MelodyNote } from '@/lib/schemas';
+import { Disc3 } from 'lucide-react';
 
 import { Toolbar } from './Toolbar';
 import { PianoKeys } from './PianoKeys';
@@ -175,18 +176,15 @@ export function PianoRoll() {
     
     const sortedNotes = [...notes].sort((a, b) => a.start - b.start);
 
-    // Pulses per quarter note (standard resolution)
-    const PPQ = 960;
+    const PPQ = 960; // Pulses per quarter note
 
     sortedNotes.forEach(note => {
-        // Calculate ticks for start and duration
         const startInTicks = note.start * PPQ;
         const durationInTicks = note.duration * PPQ;
 
-        // Ensure duration is a finite, positive number.
         const durationString = (note.duration > 0 && Number.isFinite(durationInTicks) && durationInTicks > 0) 
             ? `T${Math.floor(durationInTicks)}` 
-            : 'T1'; // Fallback to a minimal duration if invalid
+            : 'T1';
 
         track.addEvent(new MidiWriter.NoteEvent({
             pitch: [indexToMidiNote(note.pitch as number)],
@@ -247,9 +245,8 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                // Correctly convert ticks to beats
-                const startInBeats = midi.header.ticksToSeconds(note.ticks) * (bpm / 60);
-                const durationInBeats = midi.header.ticksToSeconds(note.durationTicks) * (bpm / 60);
+                const startInBeats = note.time * (bpm / 60) / (midi.header.ppq / 60);
+                const durationInBeats = note.duration * (bpm / 60) / (midi.header.ppq / 60);
 
                 newNotes.push({
                     id: nextId.current++,
@@ -273,7 +270,6 @@ export function PianoRoll() {
       console.error("Error parsing MIDI file:", error);
       toast({ variant: "destructive", title: "Błąd Importu", description: "Nie udało się przetworzyć pliku MIDI." });
     } finally {
-        // Reset file input
         if(event.target) {
             event.target.value = '';
         }
@@ -364,7 +360,15 @@ export function PianoRoll() {
   const selectedNote = notes.find(n => n.id === selectedNoteId);
 
   return (
-    <div className="flex flex-col h-full w-full font-body bg-background text-foreground">
+    <div className="flex flex-col h-full w-full font-body bg-background text-foreground relative">
+       {isGenerating && (
+        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Disc3 className="w-24 h-24 text-primary animate-spin" />
+            <p className="text-lg text-primary-foreground font-semibold">Generowanie kompozycji...</p>
+          </div>
+        </div>
+      )}
       <input
         type="file"
         ref={fileInputRef}
