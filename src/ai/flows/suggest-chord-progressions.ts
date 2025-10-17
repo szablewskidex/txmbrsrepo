@@ -14,7 +14,7 @@ import {
     type SuggestChordProgressionsOutput 
 } from '@/lib/schemas';
 
-const CACHE_TTL = 1000 * 60 * 60; // 1 godzina
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 const chordProgressionCache = new Map<string, { 
   data: string[], 
   timestamp: number 

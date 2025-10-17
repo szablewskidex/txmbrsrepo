@@ -11,7 +11,7 @@ export const MelodyNoteSchema = z.object({
 export type MelodyNote = z.infer<typeof MelodyNoteSchema>;
 
 export const GenerateMelodyInputSchema = z.object({
-  prompt: z.string().min(3).max(500).describe('A prompt describing the desired melody, including key, tempo, and length (e.g., \'A-minor, tempo 120, 8 bars\').'),
+  prompt: z.string().min(3).max(500).describe('A prompt describing the desired melody, including key, tempo, and style (e.g., "dark trap in A-minor at 140 bpm").'),
   exampleMelody: z.array(MelodyNoteSchema).optional().describe('An optional example melody to guide the generation.'),
   chordProgression: z.string().optional().describe('A specific chord progression to base the melody on (e.g., "Am-G-C-F").'),
 });
