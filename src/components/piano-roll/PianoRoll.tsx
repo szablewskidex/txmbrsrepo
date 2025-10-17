@@ -170,7 +170,7 @@ export function PianoRoll() {
 
 
   const exportMidi = () => {
-    const bpm = Tone.Transport.bpm.value || 120;
+    const bpm = (Tone.Transport.bpm.value > 0) ? Tone.Transport.bpm.value : 120;
     const track = new MidiWriter.Track();
     track.setTempo(bpm);
     track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
