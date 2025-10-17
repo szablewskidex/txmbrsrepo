@@ -34,18 +34,15 @@ export function useGenerationProgress() {
         }
     }
 
-    if (currentStageIndex === -1 && isRunning) {
-        // We've finished the simulation, but the process is still running.
-        // Hold at 99%
+    if (currentStageIndex === -1) {
+        // We've finished the simulation, but the real process might still be running.
+        // Hold at 99% and wait for the final stop() call.
         setProgress(99);
         setStatus('Finalizowanie...');
         if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null; // No need to run this anymore
+            // No need to clear the interval here, stop() will handle it.
+            // This allows the "Finalizowanie..." state to persist.
         }
-        return;
-    } else if (currentStageIndex === -1 && !isRunning) {
-        // Process is fully stopped
         return;
     }
 
@@ -66,7 +63,7 @@ export function useGenerationProgress() {
     setProgress(Math.min(99, overallProgress));
     setStatus(currentStage.name);
 
-  }, [isRunning]);
+  }, []);
 
   const start = useCallback(() => {
     if (isRunning) return;
