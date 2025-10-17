@@ -5,7 +5,7 @@ import MidiWriter from 'midi-writer-js';
 import { Midi } from '@tonejs/midi';
 import * as Tone from 'tone';
 import type { Note, GhostNote } from '@/lib/types';
-import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
+import { DEFAULT_MEASURES, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
 import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
 import { useToast } from "@/hooks/use-toast";
 import { generateMelodyAction, suggestChordProgressionsAction, analyzeAndGenerateAction } from '@/app/actions';
@@ -22,7 +22,7 @@ import { Timeline } from './Timeline';
 export function PianoRoll() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [ghostNotes, setGhostNotes] = useState<GhostNote[]>([]);
-  const [beats, setBeats] = useState(DEFAULT_BEATS);
+  const [measures, setMeasures] = useState(DEFAULT_MEASURES); // Renamed from beats
   const [cellPx, setCellPx] = useState(DEFAULT_CELL_PX);
   const [verticalZoom, setVerticalZoom] = useState(1);
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
@@ -40,6 +40,8 @@ export function PianoRoll() {
   const verticalScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
+  const beats = measures * 4;
+
   // Initialize Tone.js on the client side
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -252,9 +254,9 @@ export function PianoRoll() {
         start: n.start / secondsPerBeat,
         duration: n.duration / secondsPerBeat,
       }));
-
-      const newBeats = Math.ceil(maxTime / secondsPerBeat / 4) * 4;
-      setBeats(Math.max(DEFAULT_BEATS, newBeats));
+      
+      const newMeasures = Math.ceil(maxTime / secondsPerBeat / 4);
+      setMeasures(Math.max(DEFAULT_MEASURES, newMeasures));
       setNotes(importedNotes);
       toast({ title: "MIDI Zaimportowane", description: "Twoja kompozycja została załadowana." });
 
@@ -409,8 +411,8 @@ export function PianoRoll() {
           />
         </div>
         <ControlsPanel
-          beats={beats}
-          setBeats={setBeats}
+          measures={measures}
+          setMeasures={setMeasures}
           cellPx={cellPx}
           setCellPx={setCellPx}
           verticalZoom={verticalZoom}

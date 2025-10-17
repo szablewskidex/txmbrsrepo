@@ -16,8 +16,8 @@ import { cn } from '@/lib/utils';
 import { ALL_KEYS } from '@/lib/constants';
 
 interface ControlsPanelProps {
-  beats: number;
-  setBeats: (value: number) => void;
+  measures: number;
+  setMeasures: (value: number) => void;
   cellPx: number;
   setCellPx: (value: number) => void;
   verticalZoom: number;
@@ -33,7 +33,7 @@ interface ControlsPanelProps {
 }
 
 export function ControlsPanel({
-  beats, setBeats, cellPx, setCellPx, verticalZoom, setVerticalZoom,
+  measures, setMeasures, cellPx, setCellPx, verticalZoom, setVerticalZoom,
   selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating,
   chordProgressions, currentKey, setCurrentKey
 }: ControlsPanelProps) {
@@ -64,8 +64,8 @@ export function ControlsPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="beats">Takty: {beats}</Label>
-            <Slider id="beats" value={[beats]} onValueChange={([v]) => setBeats(v)} min={4} max={64} step={4} />
+            <Label htmlFor="measures">Takty: {measures}</Label>
+            <Slider id="measures" value={[measures]} onValueChange={([v]) => setMeasures(v)} min={4} max={64} step={4} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="h-zoom">Zoom poziomy</Label>
@@ -82,7 +82,7 @@ export function ControlsPanel({
         <Card>
           <CardHeader>
             <CardTitle>Zaznaczona nuta</CardTitle>
-            <CardDescription>{indexToNote(selectedNote.pitch as number)} @ Takt {Math.floor(selectedNote.start)}</CardDescription>
+            <CardDescription>{indexToNote(selectedNote.pitch as number)} @ Takt {Math.floor(selectedNote.start / 4) + 1}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="space-y-2">

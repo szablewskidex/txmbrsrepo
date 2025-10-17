@@ -21,6 +21,6 @@ export const ALL_KEYS = [
     'G# major', 'G# minor',
 ];
 
-export const DEFAULT_BEATS = 16;
+export const DEFAULT_MEASURES = 16;
 export const DEFAULT_CELL_PX = 40;
 export const ROW_HEIGHT = 22;
