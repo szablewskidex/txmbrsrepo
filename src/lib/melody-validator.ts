@@ -178,20 +178,30 @@ export function validateAndCorrectMelody(
   // 6. Usuń nakładające się nuty (duplikaty)
   if (removeDuplicates) {
     const uniqueNotes: MelodyNote[] = [];
-    const occupiedSlots = new Map<number, number>(); // start -> end
+    const occupiedSlots = new Map<number, { pitch: string, end: number }[]>();
 
     for (const note of processedNotes) {
+        const startSlot = note.start;
+        const endSlot = startSlot + note.duration;
         let isOverlapping = false;
-        for(const [start, end] of occupiedSlots.entries()) {
-            // Check if note overlaps with an existing note
-            if (note.start < end && note.start + note.duration > start) {
+        
+        for (let t = startSlot; t < endSlot; t += (quantizeGrid > 0 ? quantizeGrid : 0.125)) {
+            const slotTime = quantize(t, quantizeGrid > 0 ? quantizeGrid : 0.125);
+            const notesInSlot = occupiedSlots.get(slotTime) || [];
+            
+            if (notesInSlot.some(existing => existing.pitch === note.note)) {
                 isOverlapping = true;
                 break;
             }
         }
-        if(!isOverlapping) {
+
+        if (!isOverlapping) {
             uniqueNotes.push(note);
-            occupiedSlots.set(note.start, note.start + note.duration);
+            for (let t = startSlot; t < endSlot; t += (quantizeGrid > 0 ? quantizeGrid : 0.125)) {
+                 const slotTime = quantize(t, quantizeGrid > 0 ? quantizeGrid : 0.125);
+                 const notesInSlot = occupiedSlots.get(slotTime) || [];
+                 occupiedSlots.set(slotTime, [...notesInSlot, { pitch: note.note, end: endSlot }]);
+            }
         }
     }
     processedNotes = uniqueNotes;

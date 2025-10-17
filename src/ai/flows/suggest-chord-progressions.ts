@@ -15,6 +15,21 @@ import {
 } from '@/lib/schemas';
 
 
+// Zamiast generować za każdym razem, cache'uj sugestie
+const chordProgressionCache = new Map<string, string[]>();
+
+async function getCachedChordProgressions(key: string): Promise<string[]> {
+  if (!chordProgressionCache.has(key)) {
+    console.log(`Cache miss for key: ${key}. Fetching from AI...`);
+    const suggestions = await suggestChordProgressionsFlow({ key });
+    chordProgressionCache.set(key, suggestions.chordProgressions);
+  } else {
+    console.log(`Cache hit for key: ${key}.`);
+  }
+  return chordProgressionCache.get(key)!;
+}
+
+
 const suggestChordProgressionsPrompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
   input: {schema: SuggestChordProgressionsInputSchema},
@@ -47,5 +62,6 @@ const suggestChordProgressionsFlow = ai.defineFlow(
 );
 
 export async function suggestChordProgressions(input: SuggestChordProgressionsInput): Promise<SuggestChordProgressionsOutput> {
-  return suggestChordProgressionsFlow(input);
+  const progressions = await getCachedChordProgressions(input.key);
+  return { chordProgressions: progressions };
 }

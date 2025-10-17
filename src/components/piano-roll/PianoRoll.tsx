@@ -171,17 +171,18 @@ export function PianoRoll() {
 
   const exportMidi = () => {
     const track = new MidiWriter.Track();
-    const bpm = Tone.Transport.bpm.value || 120; // Default to 120 if bpm is 0
+    const bpm = Tone.Transport.bpm.value || 120;
     track.setTempo(bpm);
     track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
     
     notes.forEach(note => {
-      track.addEvent(new MidiWriter.NoteEvent({
-        pitch: [indexToMidiNote(note.pitch as number)],
-        duration: `T${MidiWriter.Utils.getTickDuration(note.duration, bpm)}`,
-        startTick: MidiWriter.Utils.getTickDuration(note.start, bpm),
-        velocity: Math.round(note.velocity / 127 * 100),
-      }));
+        const duration = note.duration > 0 ? `T${MidiWriter.Utils.getTickDuration(note.duration, bpm)}` : 'T1';
+        track.addEvent(new MidiWriter.NoteEvent({
+            pitch: [indexToMidiNote(note.pitch as number)],
+            duration: duration,
+            startTick: MidiWriter.Utils.getTickDuration(note.start, bpm),
+            velocity: Math.round(note.velocity / 127 * 100),
+        }));
     });
 
     const write = new MidiWriter.Writer([track]);
@@ -223,8 +224,12 @@ export function PianoRoll() {
       const arrayBuffer = await file.arrayBuffer();
       const midi = new Midi(arrayBuffer);
       
+      const bpm = midi.header.tempos[0]?.bpm || 120;
+      Tone.Transport.bpm.value = bpm;
+      const secondsPerBeat = 60 / bpm;
+
       const newNotes: Note[] = [];
-      let maxTime = 0;
+      let maxTimeInBeats = 0;
 
       midi.tracks.forEach(track => {
         track.notes.forEach(note => {
@@ -232,34 +237,24 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
+                const startInBeats = note.time / secondsPerBeat;
+                const durationInBeats = note.duration / secondsPerBeat;
                 newNotes.push({
                     id: nextId.current++,
-                    start: note.time, // time is in seconds, convert to beats
-                    duration: note.duration,
+                    start: startInBeats,
+                    duration: durationInBeats,
                     pitch: pitchIndex,
                     velocity: Math.round(note.velocity * 127),
                     slide: false,
                 });
-                maxTime = Math.max(maxTime, note.time + note.duration);
+                maxTimeInBeats = Math.max(maxTimeInBeats, startInBeats + durationInBeats);
             }
         });
       });
-
-      // Assuming default tempo of 120 bpm, 1 beat = 0.5s
-      // We will need a more robust time-to-beat conversion if we add tempo controls.
-      const bpm = midi.header.tempos[0]?.bpm || 120;
-      Tone.Transport.bpm.value = bpm;
-      const secondsPerBeat = 60 / bpm;
       
-      const importedNotes = newNotes.map(n => ({
-        ...n,
-        start: n.start / secondsPerBeat,
-        duration: n.duration / secondsPerBeat,
-      }));
-      
-      const newMeasures = Math.ceil(maxTime / secondsPerBeat / 4);
+      const newMeasures = Math.ceil(maxTimeInBeats / 4);
       setMeasures(Math.max(DEFAULT_MEASURES, newMeasures));
-      setNotes(importedNotes);
+      setNotes(newNotes);
       toast({ title: "MIDI Zaimportowane", description: "Twoja kompozycja została załadowana." });
 
     } catch (error) {
