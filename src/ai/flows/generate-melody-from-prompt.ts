@@ -35,7 +35,7 @@ const generateMelodyPrompt = ai.definePrompt({
   name: 'generateMelodyPrompt',
   input: {schema: GenerateMelodyInputSchema},
   output: {schema: GenerateMelodyOutputSchema},
-  prompt: `You are a melody composer. Generate a melody based on the following prompt. Return a JSON array of melody note objects.
+  prompt: `You are a melody composer specializing in minor key, dark, and trap melodies. Generate a melody that fits this style based on the following prompt. Return a JSON array of melody note objects.
 
 Prompt: {{{prompt}}}
 
