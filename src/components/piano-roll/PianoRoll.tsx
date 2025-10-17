@@ -35,6 +35,7 @@ export function PianoRoll() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [chordProgressions, setChordProgressions] = useState<string[]>([]);
   const [currentKey, setCurrentKey] = useState('A minor');
+  const [bpm, setBpm] = useState(120);
 
   const {
     progress,
@@ -59,6 +60,7 @@ export function PianoRoll() {
             oscillator: { type: 'triangle8' },
             envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 }
         }).toDestination();
+        Tone.Transport.bpm.value = bpm;
     }
     // Clean up on unmount
     return () => {
@@ -73,6 +75,13 @@ export function PianoRoll() {
         scheduledEventsRef.current = [];
     }
   }, []);
+
+  // Sync BPM with Tone.Transport
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      Tone.Transport.bpm.value = bpm;
+    }
+  }, [bpm]);
   
   // Playback logic with Tone.js
   useEffect(() => {
@@ -180,7 +189,6 @@ export function PianoRoll() {
 
 
   const exportMidi = () => {
-    const bpm = Tone.Transport.bpm.value > 0 ? Tone.Transport.bpm.value : 120;
     const track = new MidiWriter.Track();
     track.setTempo(bpm);
     track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
@@ -244,8 +252,8 @@ export function PianoRoll() {
       const arrayBuffer = await file.arrayBuffer();
       const midi = new Midi(arrayBuffer);
       
-      const bpm = midi.header.tempos[0]?.bpm || 120;
-      Tone.Transport.bpm.value = bpm;
+      const newBpm = midi.header.tempos[0]?.bpm || 120;
+      setBpm(newBpm);
       
       const ppq = midi.header.ppq;
       const newNotes: Note[] = [];
@@ -338,8 +346,10 @@ export function PianoRoll() {
   
     try {
         let result;
+        const fullPrompt = `${prompt}, ${bpm} bpm`;
+
         if (youtubeUrl) {
-            result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
+            result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: fullPrompt });
             if (result.error) {
                 toast({ variant: "destructive", title: "Błąd Analizy YouTube", description: result.error });
             }
@@ -358,7 +368,7 @@ export function PianoRoll() {
                 slide: n.slide,
             })) : undefined;
           
-            result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
+            result = await generateMelodyAction({ prompt: fullPrompt, exampleMelody, chordProgression });
             
             if (result.error) {
               toast({ variant: "destructive", title: "Błąd AI", description: result.error });
@@ -411,6 +421,8 @@ export function PianoRoll() {
         onExportMidi={exportMidi}
         onExportJson={exportJson}
         onToggleGhost={toggleGhostExample}
+        bpm={bpm}
+        onBpmChange={setBpm}
       />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">

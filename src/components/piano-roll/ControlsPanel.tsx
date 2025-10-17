@@ -37,7 +37,7 @@ export function ControlsPanel({
   selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating,
   chordProgressions, currentKey, setCurrentKey
 }: ControlsPanelProps) {
-  const [prompt, setPrompt] = useState('dark trap melody, 140 bpm');
+  const [prompt, setPrompt] = useState('dark trap melody');
   const [useExample, setUseExample] = useState(true);
   const [selectedChordProgression, setSelectedChordProgression] = useState<string | undefined>(undefined);
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -113,7 +113,7 @@ export function ControlsPanel({
               <Label htmlFor="prompt">Prompt</Label>
               <Textarea
                 id="prompt"
-                placeholder="np. mroczna melodia trapowa w A-moll, 140 bpm"
+                placeholder="np. mroczna melodia trapowa w A-moll"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 className="min-h-[80px]"
