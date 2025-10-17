@@ -99,7 +99,7 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     }
     
     // Validate the output to ensure duration is not too long
-    const validateNotes = (notes: MelodyNote[]) => notes.filter(note => note.duration <= 32);
+    const validateNotes = (notes: MelodyNote[]) => notes.filter(note => (note.start + note.duration) <= 32);
     
     const validatedOutput: GenerateFullCompositionOutput = {
       melody: validateNotes(output.melody),
