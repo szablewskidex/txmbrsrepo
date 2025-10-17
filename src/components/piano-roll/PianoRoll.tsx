@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import MidiWriter from 'midi-writer-js';
 import { Midi } from '@tonejs/midi';
+import * as Tone from 'tone';
 import type { Note, GhostNote } from '@/lib/types';
 import { DEFAULT_BEATS, DEFAULT_CELL_PX, ROW_HEIGHT } from '@/lib/constants';
 import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
@@ -30,22 +31,42 @@ export function PianoRoll() {
   const [chordProgressions, setChordProgressions] = useState<string[]>([]);
   const [currentKey, setCurrentKey] = useState('A minor');
 
-
   const nextId = useRef(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const synthRef = useRef<Tone.PolySynth | null>(null);
+  const scheduledEventsRef = useRef<number[]>([]);
   const { toast } = useToast();
-
+  
+  // Initialize Tone.js
+  useEffect(() => {
+    synthRef.current = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: 'fmsquare' },
+        envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 }
+    }).toDestination();
+    // Clean up on unmount
+    return () => {
+        synthRef.current?.dispose();
+        Tone.Transport.cancel();
+    }
+  }, []);
+  
+  // Playback logic with Tone.js
   useEffect(() => {
     let animationFrameId: number;
-    if (isPlaying) {
-      const loop = () => {
-        setPlayPosition(p => (p + 0.05) % beats);
+
+    const loop = (time: number) => {
+        setPlayPosition(Tone.Transport.seconds / Tone.Time('1m').toSeconds() * (Tone.Transport.bpm.value || 120));
         animationFrameId = requestAnimationFrame(loop);
-      };
-      animationFrameId = requestAnimationFrame(loop);
+    };
+
+    if (isPlaying) {
+        animationFrameId = requestAnimationFrame(loop);
+    } else {
+        cancelAnimationFrame(animationFrameId!);
     }
+
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isPlaying, beats]);
+  }, [isPlaying]);
 
    // Fetch chord progressions when the key changes
    useEffect(() => {
@@ -77,6 +98,12 @@ export function PianoRoll() {
     };
     setNotes(ns => [...ns, newNote]);
     setSelectedNoteId(id);
+    // Play sound on add
+    const synth = synthRef.current;
+    if (synth) {
+      const noteName = indexToNote(pitch);
+      synth.triggerAttackRelease(noteName, "8n", Tone.now(), newNote.velocity / 127);
+    }
   }, []);
 
   const removeNote = useCallback((id: number) => {
@@ -91,6 +118,42 @@ export function PianoRoll() {
   }, []);
   
   const getNote = (id: number) => notes.find(n => n.id === id);
+
+  const scheduleNotes = useCallback(() => {
+    // Clear previously scheduled events
+    scheduledEventsRef.current.forEach(id => Tone.Transport.clear(id));
+    scheduledEventsRef.current = [];
+
+    const synth = synthRef.current;
+    if (!synth) return;
+    
+    // Schedule new events
+    notes.forEach(note => {
+        const noteName = indexToNote(note.pitch as number);
+        const eventId = Tone.Transport.schedule(time => {
+            synth.triggerAttackRelease(noteName, note.duration, time, note.velocity / 127);
+        }, note.start);
+        scheduledEventsRef.current.push(eventId);
+    });
+  }, [notes]);
+  
+  const handlePlayToggle = async () => {
+    if (Tone.context.state !== 'running') {
+        await Tone.start();
+    }
+    
+    if (isPlaying) {
+        Tone.Transport.stop();
+        setPlayPosition(0);
+    } else {
+        scheduleNotes();
+        Tone.Transport.loop = true;
+        Tone.Transport.loopEnd = beats;
+        Tone.Transport.start();
+    }
+    setIsPlaying(p => !p);
+  };
+
 
   const exportMidi = () => {
     const track = new MidiWriter.Track();
@@ -168,7 +231,10 @@ export function PianoRoll() {
 
       // Assuming default tempo of 120 bpm, 1 beat = 0.5s
       // We will need a more robust time-to-beat conversion if we add tempo controls.
-      const secondsPerBeat = 60 / (midi.header.tempos[0]?.bpm || 120);
+      const bpm = midi.header.tempos[0]?.bpm || 120;
+      Tone.Transport.bpm.value = bpm;
+      const secondsPerBeat = 60 / bpm;
+      
       const importedNotes = newNotes.map(n => ({
         ...n,
         start: n.start / secondsPerBeat,
@@ -280,7 +346,7 @@ export function PianoRoll() {
       />
       <Toolbar
         isPlaying={isPlaying}
-        onPlayToggle={() => setIsPlaying(p => !p)}
+        onPlayToggle={handlePlayToggle}
         onImportMidiClick={handleImportMidiClick}
         onExportMidi={exportMidi}
         onExportJson={exportJson}
