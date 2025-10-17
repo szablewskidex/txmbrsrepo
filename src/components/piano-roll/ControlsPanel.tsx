@@ -64,7 +64,7 @@ export function ControlsPanel({
         <Card>
           <CardHeader>
             <CardTitle>Zaznaczona nuta</CardTitle>
-            <CardDescription>{indexToNote(selectedNote.pitch)} @ Takt {selectedNote.start}</CardDescription>
+            <CardDescription>{indexToNote(selectedNote.pitch)} @ Takt {Math.floor(selectedNote.start)}</CardDescription>
           </Header>
           <CardContent className="space-y-4">
              <div className="space-y-2">
