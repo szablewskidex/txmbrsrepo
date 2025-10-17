@@ -25,6 +25,11 @@ const GenerateMelodyInputSchema = z.object({
 });
 export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
 
+const InternalPromptInputSchema = z.object({
+  prompt: z.string(),
+  exampleMelodyJSON: z.string().optional(),
+});
+
 
 const GenerateMelodyOutputSchema = z.array(MelodyNoteSchema);
 export type GenerateMelodyOutput = z.infer<typeof GenerateMelodyOutputSchema>;
@@ -35,17 +40,17 @@ export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Prom
 
 const generateMelodyPrompt = ai.definePrompt({
   name: 'generateMelodyPrompt',
-  input: {schema: GenerateMelodyInputSchema},
+  input: {schema: InternalPromptInputSchema},
   output: {schema: GenerateMelodyOutputSchema},
   prompt: `You are a melody composer specializing in minor key, dark, and trap melodies. Generate a melody that fits this style based on the following prompt. Return a JSON array of melody note objects.
 
 Prompt: {{{prompt}}}
 
-{{#if exampleMelody}}
+{{#if exampleMelodyJSON}}
 Use the following melody as a strong inspiration for the style, rhythm, and note choices. The generated melody should feel like a continuation or variation of this example.
 
 Example Melody:
-{{{jsonStringify exampleMelody}}}
+{{{exampleMelodyJSON}}}
 {{/if}}
 
 Each note object should have the following properties:
@@ -62,8 +67,14 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     inputSchema: GenerateMelodyInputSchema,
     outputSchema: GenerateMelodyOutputSchema,
   },
-  async input => {
-    const {output} = await generateMelodyPrompt(input);
+  async ({ prompt, exampleMelody }) => {
+    const promptInput: z.infer<typeof InternalPromptInputSchema> = {
+      prompt,
+      exampleMelodyJSON: exampleMelody ? JSON.stringify(exampleMelody, null, 2) : undefined,
+    };
+
+    const {output} = await generateMelodyPrompt(promptInput);
+    
     // Validate duration
     const validatedOutput = output?.filter(note => note.duration <= 16) ?? [];
     return validatedOutput;
