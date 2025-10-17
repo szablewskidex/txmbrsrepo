@@ -14,7 +14,7 @@ import {z} from 'genkit';
 const MelodyNoteSchema = z.object({
   note: z.string().describe('The note name (e.g., C4).'),
   start: z.number().describe('The start time of the note in beats.'),
-  duration: z.number().describe('The duration of the note in beats.'),
+  duration: z.number().describe('The duration of the note in beats. Maximum value is 16.'),
   velocity: z.number().describe('The velocity of the note (0-127).'),
   slide: z.boolean().describe('Whether the note has a slide/portamento effect.'),
 });
@@ -51,7 +51,7 @@ Example Melody:
 Each note object should have the following properties:
 - note: The note name (e.g., C4).
 - start: The start time of the note in beats.
-- duration: The duration of the note in beats.
+- duration: The duration of the note in beats. The maximum value for duration is 16.
 - velocity: The velocity of the note (0-127).
 - slide: Whether the note has a slide/portamento effect (boolean).`,
 });
@@ -64,6 +64,8 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await generateMelodyPrompt(input);
-    return output!;
+    // Validate duration
+    const validatedOutput = output?.filter(note => note.duration <= 16) ?? [];
+    return validatedOutput;
   }
 );
