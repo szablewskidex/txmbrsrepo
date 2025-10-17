@@ -6,6 +6,21 @@ export const PIANO_KEYS = [
   'C5','C#5','D5','D#5','E5','F5','F#5','G5','G#5','A5','A#5','B5'
 ];
 
+export const ALL_KEYS = [
+    'A major', 'A minor',
+    'A# major', 'A# minor',
+    'B major', 'B minor',
+    'C major', 'C minor',
+    'C# major', 'C# minor',
+    'D major', 'D minor',
+    'D# major', 'D# minor',
+    'E major', 'E minor',
+    'F major', 'F minor',
+    'F# major', 'F# minor',
+    'G major', 'G minor',
+    'G# major', 'G# minor',
+];
+
 export const DEFAULT_BEATS = 16;
 export const DEFAULT_CELL_PX = 40;
 export const ROW_HEIGHT = 22;

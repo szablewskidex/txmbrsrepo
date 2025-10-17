@@ -184,7 +184,7 @@ export function PianoRoll() {
     a.href = dataUri;
     a.download = 'pianoroll-export.mid';
     document.body.appendChild(a);
-    a.click();
+a.click();
     document.body.removeChild(a);
     toast({ title: "MIDI Eksportowane", description: "Twoja kompozycja została pobrana." });
   };
@@ -338,34 +338,7 @@ export function PianoRoll() {
         if (result.error) {
           toast({ variant: "destructive", title: "Błąd AI", description: result.error });
         } else {
-            if (useExample) {
-              processAndSetNotes(result.data);
-            } else {
-              // When not using example, append notes
-              if (result.data) {
-                const convertAiNotes = (aiNotes: MelodyNote[]): Note[] => {
-                  return aiNotes.map(aiNote => {
-                    const pitch = noteToIndex(aiNote.note);
-                    if (pitch === -1) return null;
-                    return {
-                      id: nextId.current++,
-                      start: aiNote.start,
-                      duration: aiNote.duration,
-                      pitch,
-                      velocity: aiNote.velocity,
-                      slide: aiNote.slide,
-                    };
-                  }).filter((n): n is Note => n !== null);
-                };
-                const newNotes = [
-                  ...convertAiNotes(result.data.melody),
-                  ...convertAiNotes(result.data.chords),
-                  ...convertAiNotes(result.data.bassline)
-                ];
-                setNotes(prev => [...prev, ...newNotes]);
-                toast({ title: "Kompozycja Wygenerowana", description: "AI dodało nową kompozycję." });
-              }
-            }
+            processAndSetNotes(result.data);
         }
     }
     
@@ -432,6 +405,8 @@ export function PianoRoll() {
           onGenerateMelody={handleGenerateMelody}
           isGenerating={isGenerating}
           chordProgressions={chordProgressions}
+          currentKey={currentKey}
+          setCurrentKey={setCurrentKey}
         />
       </div>
     </div>

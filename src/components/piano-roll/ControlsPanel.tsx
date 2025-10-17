@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sparkles, Trash2, Youtube } from 'lucide-react';
 import { Input } from '../ui/input';
 import { cn } from '@/lib/utils';
+import { ALL_KEYS } from '@/lib/constants';
 
 interface ControlsPanelProps {
   beats: number;
@@ -27,23 +28,27 @@ interface ControlsPanelProps {
   onGenerateMelody: (prompt: string, useExample: boolean, chordProgression?: string, youtubeUrl?: string) => Promise<void>;
   isGenerating: boolean;
   chordProgressions: string[];
+  currentKey: string;
+  setCurrentKey: (key: string) => void;
 }
 
 export function ControlsPanel({
   beats, setBeats, cellPx, setCellPx, verticalZoom, setVerticalZoom,
   selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating,
-  chordProgressions
+  chordProgressions, currentKey, setCurrentKey
 }: ControlsPanelProps) {
-  const [prompt, setPrompt] = useState('dark trap melody in A-minor, 140 bpm');
+  const [prompt, setPrompt] = useState('dark trap melody, 140 bpm');
   const [useExample, setUseExample] = useState(true);
   const [selectedChordProgression, setSelectedChordProgression] = useState<string | undefined>(undefined);
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
   useEffect(() => {
-    if (chordProgressions.length > 0 && !selectedChordProgression) {
+    if (chordProgressions.length > 0) {
       setSelectedChordProgression(chordProgressions[0]);
+    } else {
+      setSelectedChordProgression(undefined);
     }
-  }, [chordProgressions, selectedChordProgression]);
+  }, [chordProgressions]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +132,19 @@ export function ControlsPanel({
                         className="pl-9"
                     />
                 </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Tonacja</Label>
+              <Select onValueChange={setCurrentKey} value={currentKey} disabled={!!youtubeUrl}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Wybierz tonację..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {ALL_KEYS.map((key) => (
+                    <SelectItem key={key} value={key}>{key}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
              <div className="space-y-2">
               <Label>Progresja Akordów</Label>
