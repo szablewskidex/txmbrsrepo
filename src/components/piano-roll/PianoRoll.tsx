@@ -37,7 +37,7 @@ export function PianoRoll() {
   const scheduledEventsRef = useRef<number[]>([]);
   const { toast } = useToast();
   
-  // Initialize Tone.js
+  // Initialize Tone.js on the client side
   useEffect(() => {
     synthRef.current = new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'fmsquare' },
@@ -393,3 +393,5 @@ export function PianoRoll() {
     </div>
   );
 }
+
+    
