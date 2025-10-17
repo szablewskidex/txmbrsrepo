@@ -14,8 +14,7 @@ import {
   GenerateMelodyInputSchema,
   GenerateFullCompositionOutputSchema,
   type GenerateMelodyInput, 
-  type GenerateFullCompositionOutput,
-  type MelodyNote
+  type GenerateFullCompositionOutput
 } from '@/lib/schemas';
 import { validateAndCorrectMelody, analyzeMelody } from '@/lib/melody-validator';
 

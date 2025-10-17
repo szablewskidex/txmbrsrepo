@@ -37,15 +37,6 @@ function midiToNote(midi: number): string {
   return `${noteName}${octave}`;
 }
 
-/**
- * Sprawdza czy nuta jest w danej skali
- */
-function isNoteInScale(noteName: string, key: string, scaleType: keyof typeof SCALES = 'minor'): boolean {
-  const midiNote = noteToMidi(noteName);
-  const rootNote = noteToMidi(key.match(/^[A-G][b#]?/)?.[0] + '4' || 'A4');
-  const noteInScale = (midiNote - rootNote + 1200) % 12;
-  return SCALES[scaleType].includes(noteInScale);
-}
 
 /**
  * Koryguje nutę do najbliższej w skali
@@ -131,6 +122,10 @@ export function validateAndCorrectMelody(
     removeDuplicates = true,
   } = options;
 
+  if (!notes || notes.length === 0) {
+      return [];
+  }
+
   const scaleType = key.includes('major') ? 'major' : 'minor';
   let processedNotes = [...notes];
 
@@ -178,30 +173,16 @@ export function validateAndCorrectMelody(
   // 6. Usuń nakładające się nuty (duplikaty)
   if (removeDuplicates) {
     const uniqueNotes: MelodyNote[] = [];
-    const occupiedSlots = new Map<number, { pitch: string, end: number }[]>();
+    const timeSlots = new Set<string>();
 
     for (const note of processedNotes) {
-        const startSlot = note.start;
-        const endSlot = startSlot + note.duration;
-        let isOverlapping = false;
-        
-        for (let t = startSlot; t < endSlot; t += (quantizeGrid > 0 ? quantizeGrid : 0.125)) {
-            const slotTime = quantize(t, quantizeGrid > 0 ? quantizeGrid : 0.125);
-            const notesInSlot = occupiedSlots.get(slotTime) || [];
-            
-            if (notesInSlot.some(existing => existing.pitch === note.note)) {
-                isOverlapping = true;
-                break;
-            }
-        }
+        const startSlot = quantize(note.start, quantizeGrid > 0 ? quantizeGrid : 0.125);
+        const pitch = note.note;
+        const key = `${startSlot}:${pitch}`;
 
-        if (!isOverlapping) {
+        if (!timeSlots.has(key)) {
             uniqueNotes.push(note);
-            for (let t = startSlot; t < endSlot; t += (quantizeGrid > 0 ? quantizeGrid : 0.125)) {
-                 const slotTime = quantize(t, quantizeGrid > 0 ? quantizeGrid : 0.125);
-                 const notesInSlot = occupiedSlots.get(slotTime) || [];
-                 occupiedSlots.set(slotTime, [...notesInSlot, { pitch: note.note, end: endSlot }]);
-            }
+            timeSlots.add(key);
         }
     }
     processedNotes = uniqueNotes;
