@@ -186,6 +186,18 @@ interface EnhancedMelodyAnalysis {
 }
 
 function enhancedAnalyzeMelody(melody: MelodyNote[], key: string): EnhancedMelodyAnalysis {
+  if (!melody || melody.length === 0) {
+    return {
+      score: 0,
+      issues: ['No notes in melody'],
+      avgInterval: 0,
+      range: 0,
+      maxInterval: 0,
+      noteCount: 0,
+      rhythmicVariety: 0,
+      coverageRatio: 0,
+    };
+  }
   const baseAnalysis = analyzeMelody(melody);
   
   // Oblicz pokrycie czasowe
@@ -373,5 +385,3 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
 export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateFullCompositionOutput> {
   return generateMelodyFromPromptFlow(input);
 }
-
-    
