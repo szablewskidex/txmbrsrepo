@@ -8,7 +8,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'zod';
 import { suggestChordProgressions } from './suggest-chord-progressions';
 import { 
   GenerateMelodyInputSchema,
@@ -17,11 +17,13 @@ import {
   type GenerateFullCompositionOutput,
   type MelodyNote
 } from '@/lib/schemas';
+import { validateAndCorrectMelody, analyzeMelody } from '@/lib/melody-validator';
 
 const InternalPromptInputSchema = z.object({
   prompt: z.string(),
   chordProgression: z.string(),
   exampleMelodyJSON: z.string().optional(),
+  feedback: z.string().optional(),
 });
 
 
@@ -55,6 +57,12 @@ The composition MUST adhere to the principles of music theory. The notes you cho
 -   Example Melody: {{{exampleMelodyJSON}}}
 {{/if}}
 
+{{#if feedback}}
+**Feedback on Previous Attempt:**
+-   Your last attempt was analyzed and needs improvement in the following areas: {{{feedback}}}
+-   Please generate a new, improved version that addresses this feedback.
+{{/if}}
+
 Return a JSON object with three keys: "bassline", "chords", and "melody". Each key should contain an array of note objects. Each note object must have:
 - note: The note name (e.g., C4).
 - start: The start time in beats.
@@ -62,6 +70,9 @@ Return a JSON object with three keys: "bassline", "chords", and "melody". Each k
 - velocity: The velocity (0-127).
 - slide: A boolean for portamento.`,
 });
+
+const MAX_RETRIES = 3;
+const QUALITY_THRESHOLD = 70; // Minimum score to accept a melody
 
 const generateMelodyFromPromptFlow = ai.defineFlow(
   {
@@ -71,40 +82,71 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
   },
   async ({ prompt, exampleMelody, chordProgression: providedChordProgression }) => {
     let chordProgression = providedChordProgression;
+    const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
+    const key = keyMatch ? keyMatch[0] : 'A minor';
 
-    // If no chord progression is provided, get one and pick a random one.
+    // If no chord progression is provided, get one.
     if (!chordProgression) {
-      const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
-      const key = keyMatch ? keyMatch[0] : 'A minor';
       const chordSuggestions = await suggestChordProgressions({ key });
       if (chordSuggestions.chordProgressions.length > 0) {
-        const randomIndex = Math.floor(Math.random() * chordSuggestions.chordProgressions.length);
-        chordProgression = chordSuggestions.chordProgressions[randomIndex];
+        // Choose the first (best) progression instead of random
+        chordProgression = chordSuggestions.chordProgressions[0];
       } else {
         // This fallback should ideally not be hit if suggestChordProgressions is reliable.
-        // If it is, it might default to a key that doesn't match the prompt.
         chordProgression = 'Am-G-C-F'; 
       }
     }
     
-    const promptInput: z.infer<typeof InternalPromptInputSchema> = {
-      prompt,
-      chordProgression,
-      exampleMelodyJSON: exampleMelody ? JSON.stringify(exampleMelody, null, 2) : undefined,
-    };
+    let lastOutput: GenerateFullCompositionOutput | null = null;
+    let feedback: string | undefined = undefined;
 
-    const {output} = await generateMelodyPrompt(promptInput);
-    if (!output) {
-      throw new Error("AI failed to generate a composition.");
+    for (let i = 0; i < MAX_RETRIES; i++) {
+        const promptInput: z.infer<typeof InternalPromptInputSchema> = {
+            prompt,
+            chordProgression,
+            exampleMelodyJSON: exampleMelody ? JSON.stringify(exampleMelody, null, 2) : undefined,
+            feedback,
+        };
+
+        const { output } = await generateMelodyPrompt(promptInput);
+        if (!output) {
+            continue; // Try again if AI returns nothing
+        }
+        
+        lastOutput = output;
+
+        const melodyAnalysis = analyzeMelody(output.melody);
+        
+        if (melodyAnalysis.score >= QUALITY_THRESHOLD) {
+            console.log(`Generated melody passed quality check on attempt ${i + 1} with score: ${melodyAnalysis.score}`);
+            break; // Melody is good enough
+        }
+
+        console.log(`Attempt ${i + 1} failed quality check with score: ${melodyAnalysis.score}. Retrying...`);
+        
+        // Construct feedback for the next attempt
+        let feedbackParts: string[] = [];
+        if (melodyAnalysis.avgInterval < 2) feedbackParts.push("The melody is too monotonic, use larger intervals.");
+        if (melodyAnalysis.avgInterval > 5) feedbackParts.push("The melody is too jumpy, use smaller intervals.");
+        if (melodyAnalysis.range < 12) feedbackParts.push("The melodic range is too narrow, use more of the octave range.");
+        if (melodyAnalysis.maxInterval > 12) feedbackParts.push("The melody has too large of a leap between notes, make it more stepwise.");
+        
+        feedback = feedbackParts.join(' ');
+        
+        if (i === MAX_RETRIES - 1) {
+            console.warn("Max retries reached. Returning the last generated melody despite low quality.");
+        }
+    }
+
+    if (!lastOutput) {
+        throw new Error("AI failed to generate a composition after multiple retries.");
     }
     
-    // Validate the output to ensure duration is not too long
-    const validateNotes = (notes: MelodyNote[]) => notes.filter(note => (note.start + note.duration) <= 32);
-    
+    // Final validation and correction on the best-effort output
     const validatedOutput: GenerateFullCompositionOutput = {
-      melody: validateNotes(output.melody),
-      chords: validateNotes(output.chords),
-      bassline: validateNotes(output.bassline),
+      melody: validateAndCorrectMelody(lastOutput.melody, key, { quantizeGrid: 1/32, correctToScale: true, maxInterval: 12 }),
+      chords: validateAndCorrectMelody(lastOutput.chords, key, { quantizeGrid: 1/16, correctToScale: true }),
+      bassline: validateAndCorrectMelody(lastOutput.bassline, key, { quantizeGrid: 1/8, correctToScale: true }),
     };
     
     return validatedOutput;
@@ -114,3 +156,5 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
 export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateFullCompositionOutput> {
   return generateMelodyFromPromptFlow(input);
 }
+
+    

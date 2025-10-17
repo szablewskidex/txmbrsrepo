@@ -19,11 +19,16 @@ const prompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
   input: {schema: SuggestChordProgressionsInputSchema},
   output: {schema: SuggestChordProgressionsOutputSchema},
-  prompt: `You are a music theory expert. Suggest 3 common, compelling chord progressions for the key of {{{key}}}. The progressions should be suitable for dark, trap, or pop music. Return the result as a JSON object with a "chordProgressions" key containing an array of strings.
+  prompt: `You are a music theory expert specializing in modern trap and hip-hop. Suggest 3 compelling chord progressions for the key of {{{key}}}. 
 
-For example, for the key of 'A minor', you might suggest:
+The first progression should be the most common and effective. The next two can be more creative.
 
-["Am-G-C-F", "Am-F-C-G", "Am-E-F-C"]`,
+Here are some examples of the desired style for 'A minor':
+- "Am-G-C-F" (a classic 1-b7-b3-b6)
+- "Am-F-C-G" (a variation of the above)
+- "Am-Dm-E-Am" (a more dramatic, classical feel)
+
+Return the result as a JSON object with a "chordProgressions" key containing an array of strings. The most conventional and strong progression should be first in the array.`,
 });
 
 const suggestChordProgressionsFlow = ai.defineFlow(
@@ -41,3 +46,5 @@ const suggestChordProgressionsFlow = ai.defineFlow(
 export async function suggestChordProgressions(input: SuggestChordProgressionsInput): Promise<SuggestChordProgressionsOutput> {
   return suggestChordProgressionsFlow(input);
 }
+
+    
