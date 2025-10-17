@@ -88,7 +88,23 @@ export function PianoRoll() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast({ title: "MIDI Exported", description: "Your composition has been downloaded." });
+    toast({ title: "MIDI Eksportowane", description: "Twoja kompozycja została pobrana." });
+  };
+
+  const exportJson = () => {
+    const exportData = notes.map(n => ({
+        note: indexToNote(n.pitch),
+        start: n.start,
+        duration: n.duration,
+        velocity: n.velocity,
+        slide: n.slide,
+    }));
+    const jsonString = JSON.stringify(exportData, null, 2);
+    navigator.clipboard.writeText(jsonString).then(() => {
+        toast({ title: "JSON Skopiowany", description: "Dane nut zostały skopiowane do schowka." });
+    }, () => {
+        toast({ variant: "destructive", title: "Błąd", description: "Nie udało się skopiować danych JSON." });
+    });
   };
   
   const toggleGhostExample = () => {
@@ -107,12 +123,12 @@ export function PianoRoll() {
     const result = await generateMelodyAction(prompt);
     
     if (result.error) {
-      toast({ variant: "destructive", title: "AI Error", description: result.error });
+      toast({ variant: "destructive", title: "Błąd AI", description: result.error });
     } else if (result.data) {
       const aiNotes: Note[] = result.data.map(aiNote => {
         const pitch = noteToIndex(aiNote.note);
         if (pitch === -1) {
-          console.warn(`AI generated an unmappable note: ${aiNote.note}`);
+          console.warn(`AI wygenerowało nieprawidłową nutę: ${aiNote.note}`);
           return null;
         }
         return {
@@ -126,7 +142,7 @@ export function PianoRoll() {
       }).filter((n): n is Note => n !== null);
       
       setNotes(prev => [...prev, ...aiNotes]);
-      toast({ title: "Melody Generated", description: "AI has added new notes to your composition." });
+      toast({ title: "Melodia Wygenerowana", description: "AI dodało nowe nuty do Twojej kompozycji." });
     }
     
     setIsGenerating(false);
@@ -140,6 +156,7 @@ export function PianoRoll() {
         isPlaying={isPlaying}
         onPlayToggle={() => setIsPlaying(p => !p)}
         onExportMidi={exportMidi}
+        onExportJson={exportJson}
         onToggleGhost={toggleGhostExample}
       />
       <div className="flex flex-1 overflow-hidden">

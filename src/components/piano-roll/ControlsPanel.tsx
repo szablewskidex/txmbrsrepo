@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Sparkles, Trash2, GitCommitHorizontal } from 'lucide-react';
+import { Sparkles, Trash2 } from 'lucide-react';
 
 interface ControlsPanelProps {
   beats: number;
@@ -42,19 +42,19 @@ export function ControlsPanel({
     <div className="w-64 bg-card border-l p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
       <Card>
         <CardHeader>
-          <CardTitle>Grid Controls</CardTitle>
+          <CardTitle>Ustawienia siatki</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="beats">Beats: {beats}</Label>
+            <Label htmlFor="beats">Takty: {beats}</Label>
             <Slider id="beats" value={[beats]} onValueChange={([v]) => setBeats(v)} min={4} max={64} step={4} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="h-zoom">Horizontal Zoom</Label>
+            <Label htmlFor="h-zoom">Zoom poziomy</Label>
             <Slider id="h-zoom" value={[cellPx]} onValueChange={([v]) => setCellPx(v)} min={10} max={100} step={1} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="v-zoom">Vertical Zoom</Label>
+            <Label htmlFor="v-zoom">Zoom pionowy</Label>
             <Slider id="v-zoom" value={[verticalZoom]} onValueChange={([v]) => setVerticalZoom(v)} min={0.5} max={2.5} step={0.1} />
           </div>
         </CardContent>
@@ -63,9 +63,9 @@ export function ControlsPanel({
       {selectedNote && (
         <Card>
           <CardHeader>
-            <CardTitle>Selected Note</CardTitle>
-            <CardDescription>{indexToNote(selectedNote.pitch)} @ Beat {selectedNote.start}</CardDescription>
-          </CardHeader>
+            <CardTitle>Zaznaczona nuta</CardTitle>
+            <CardDescription>{indexToNote(selectedNote.pitch)} @ Takt {selectedNote.start}</CardDescription>
+          </Header>
           <CardContent className="space-y-4">
              <div className="space-y-2">
                 <Label htmlFor="velocity">Velocity: {selectedNote.velocity}</Label>
@@ -78,7 +78,7 @@ export function ControlsPanel({
           </CardContent>
           <CardFooter>
             <Button variant="destructive" size="sm" onClick={() => onRemoveNote(selectedNote.id)}>
-              <Trash2 className="mr-2 h-4 w-4" /> Delete
+              <Trash2 className="mr-2 h-4 w-4" /> Usuń
             </Button>
           </CardFooter>
         </Card>
@@ -86,13 +86,13 @@ export function ControlsPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Sparkles className="text-accent" /> AI Generator</CardTitle>
-          <CardDescription>Generate a melody from a text prompt.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><Sparkles className="text-accent" /> Generator AI</CardTitle>
+          <CardDescription>Wygeneruj melodię z opisu tekstowego.</CardDescription>
         </CardHeader>
         <form onSubmit={handleGenerate}>
           <CardContent>
             <Textarea
-              placeholder="e.g., Happy 8-bit theme in C major, 140 bpm"
+              placeholder="np. mroczna melodia trapowa w A-moll, 140 bpm"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               className="min-h-[80px]"
@@ -100,7 +100,7 @@ export function ControlsPanel({
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isGenerating || !prompt}>
-              {isGenerating ? 'Generating...' : 'Generate Melody'}
+              {isGenerating ? 'Generowanie...' : 'Generuj melodię'}
             </Button>
           </CardFooter>
         </form>
