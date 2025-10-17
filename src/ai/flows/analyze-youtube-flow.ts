@@ -39,6 +39,15 @@ const analyzeYouTubeAudio = ai.defineTool(
     outputSchema: AnalyzedMelodySchema,
   },
   async ({ youtubeUrl }) => {
+    try {
+      new URL(youtubeUrl);
+      if (!youtubeUrl.includes('youtube.com') && !youtubeUrl.includes('youtu.be')) {
+        throw new Error('Invalid YouTube URL');
+      }
+    } catch {
+      throw new Error('Invalid URL format');
+    }
+
     console.log(`Simulating analysis of: ${youtubeUrl}`);
     // This is a mock implementation.
     // A real implementation would download the audio and process it.

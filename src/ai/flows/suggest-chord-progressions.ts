@@ -14,9 +14,12 @@ import {
     type SuggestChordProgressionsOutput 
 } from '@/lib/schemas';
 
+const CACHE_TTL = 1000 * 60 * 60; // 1 godzina
+const chordProgressionCache = new Map<string, { 
+  data: string[], 
+  timestamp: number 
+}>();
 
-// Zamiast generować za każdym razem, cache'uj sugestie
-const chordProgressionCache = new Map<string, string[]>();
 
 const suggestChordProgressionsPrompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
@@ -50,15 +53,22 @@ const suggestChordProgressionsFlow = ai.defineFlow(
 );
 
 async function getCachedChordProgressions(key: string): Promise<string[]> {
-  if (!chordProgressionCache.has(key)) {
-    console.log(`Cache miss for key: ${key}. Fetching from AI...`);
-    // Poprawka: Wywołaj `suggestChordProgressionsFlow` zamiast rekurencyjnego wywołania siebie
-    const suggestions = await suggestChordProgressionsFlow({ key });
-    chordProgressionCache.set(key, suggestions.chordProgressions);
-  } else {
+  const cached = chordProgressionCache.get(key);
+  const now = Date.now();
+
+  if (cached && (now - cached.timestamp) < CACHE_TTL) {
     console.log(`Cache hit for key: ${key}.`);
+    return cached.data;
   }
-  return chordProgressionCache.get(key)!;
+  
+  console.log(`Cache miss for key: ${key}. Fetching from AI...`);
+  const suggestions = await suggestChordProgressionsFlow({ key });
+  chordProgressionCache.set(key, { 
+    data: suggestions.chordProgressions, 
+    timestamp: now 
+  });
+  
+  return suggestions.chordProgressions;
 }
 
 
