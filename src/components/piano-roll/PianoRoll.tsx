@@ -20,6 +20,8 @@ import { ControlsPanel } from './ControlsPanel';
 import { EventEditor } from './EventEditor';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 import { Timeline } from './Timeline';
+import { useGenerationProgress } from '@/hooks/useGenerationProgress';
+import { Progress } from '../ui/progress';
 
 export function PianoRoll() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -33,6 +35,14 @@ export function PianoRoll() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [chordProgressions, setChordProgressions] = useState<string[]>([]);
   const [currentKey, setCurrentKey] = useState('A minor');
+
+  const {
+    progress,
+    status,
+    start: startProgress,
+    stop: stopProgress,
+    reset: resetProgress,
+  } = useGenerationProgress();
 
   const nextId = useRef(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -247,9 +257,8 @@ export function PianoRoll() {
             const pitchIndex = noteToIndex(pitchName);
 
             if (pitchIndex !== -1) {
-                // Convert time (in seconds) and duration (in seconds) to beats
-                const startInBeats = note.time * (bpm / 60);
-                const durationInBeats = note.duration * (bpm / 60);
+                const startInBeats = (note.ticks / ppq);
+                const durationInBeats = (note.durationTicks / ppq);
 
                 newNotes.push({
                     id: nextId.current++,
@@ -325,39 +334,43 @@ export function PianoRoll() {
 
   const handleGenerateMelody = async (prompt: string, useExample: boolean, chordProgression?: string, youtubeUrl?: string) => {
     setIsGenerating(true);
+    startProgress();
   
-    if (youtubeUrl) {
-        const result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
-        if (result.error) {
-            toast({ variant: "destructive", title: "Błąd Analizy YouTube", description: result.error });
+    try {
+        if (youtubeUrl) {
+            const result = await analyzeAndGenerateAction({ youtubeUrl, targetPrompt: prompt });
+            if (result.error) {
+                toast({ variant: "destructive", title: "Błąd Analizy YouTube", description: result.error });
+            } else {
+                processAndSetNotes(result.data);
+            }
         } else {
-            processAndSetNotes(result.data);
+            const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
+            const key = keyMatch ? keyMatch[0] : currentKey;
+            if (key !== currentKey) {
+              setCurrentKey(key);
+            }
+          
+            const exampleMelody = useExample ? notes.map(n => ({
+                note: indexToNote(n.pitch as number),
+                start: n.start,
+                duration: n.duration,
+                velocity: n.velocity,
+                slide: n.slide,
+            })) : undefined;
+          
+            const result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
+            
+            if (result.error) {
+              toast({ variant: "destructive", title: "Błąd AI", description: result.error });
+            } else {
+                processAndSetNotes(result.data);
+            }
         }
-    } else {
-        const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
-        const key = keyMatch ? keyMatch[0] : currentKey;
-        if (key !== currentKey) {
-          setCurrentKey(key);
-        }
-      
-        const exampleMelody = useExample ? notes.map(n => ({
-            note: indexToNote(n.pitch as number),
-            start: n.start,
-            duration: n.duration,
-            velocity: n.velocity,
-            slide: n.slide,
-        })) : undefined;
-      
-        const result = await generateMelodyAction({ prompt, exampleMelody, chordProgression });
-        
-        if (result.error) {
-          toast({ variant: "destructive", title: "Błąd AI", description: result.error });
-        } else {
-            processAndSetNotes(result.data);
-        }
+    } finally {
+        stopProgress();
+        setIsGenerating(false);
     }
-    
-    setIsGenerating(false);
   };
 
   const selectedNote = notes.find(n => n.id === selectedNoteId);
@@ -365,10 +378,16 @@ export function PianoRoll() {
   return (
     <div className="flex flex-col h-full w-full font-body bg-background text-foreground relative">
        {isGenerating && (
-        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-6 w-80">
             <Disc3 className="w-24 h-24 text-primary animate-spin" />
-            <p className="text-lg text-primary-foreground font-semibold">Generowanie kompozycji...</p>
+            <div className="w-full text-center">
+                <p className="text-2xl text-primary-foreground font-semibold tabular-nums">
+                    {Math.round(progress)}%
+                </p>
+                <p className="text-sm text-muted-foreground mt-1 min-h-[20px]">{status}</p>
+            </div>
+            <Progress value={progress} className="w-full" />
           </div>
         </div>
       )}
