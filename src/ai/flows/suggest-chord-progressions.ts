@@ -28,11 +28,11 @@ const prompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
   input: {schema: SuggestChordProgressionsInputSchema},
   output: {schema: SuggestChordProgressionsOutputSchema},
-  prompt: `Suggest 3 common chord progressions for the key of {{{key}}}. Return the result as a JSON array of strings.
+  prompt: `You are a music theory expert. Suggest 3 common, compelling chord progressions for the key of {{{key}}}. The progressions should be suitable for dark, trap, or pop music. Return the result as a JSON object with a "chordProgressions" key containing an array of strings.
 
-For example:
+For example, for A minor, you might suggest:
 
-["Am-G-C-F", "Dm-Am-G-C", "F-C-G-Am"]`,
+["Am-G-C-F", "Dm-Am-E-Am", "Am-F-C-G"]`,
 });
 
 const suggestChordProgressionsFlow = ai.defineFlow(
