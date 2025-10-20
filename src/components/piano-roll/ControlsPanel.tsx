@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { Note } from '@/lib/types';
+import type { MelodyNote } from '@/lib/schemas';
 import { indexToNote } from '@/lib/music';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sparkles, Trash2, Youtube } from 'lucide-react';
 import { Input } from '../ui/input';
 import { cn } from '@/lib/utils';
-import { ALL_KEYS } from '@/lib/constants';
+import { ALL_KEYS, DEFAULT_MEASURES, GRID_OPTIONS, getGridLabel } from '@/lib/constants';
 
 interface ControlsPanelProps {
   measures: number;
@@ -25,35 +26,88 @@ interface ControlsPanelProps {
   selectedNote: Note | undefined;
   onRemoveNote: (id: number) => void;
   onUpdateNote: (id: number, patch: Partial<Note>) => void;
-  onGenerateMelody: (prompt: string, useExample: boolean, chordProgression?: string, youtubeUrl?: string) => Promise<void>;
+  onGenerateMelody: (
+    prompt: string,
+    key: string,
+    useExample: boolean,
+    chordProgression?: string,
+    youtubeUrl?: string,
+    exampleMelody?: MelodyNote[],
+    measures?: number,
+    tempo?: number,
+    intensifyDarkness?: boolean,
+    gridResolution?: number,
+  ) => Promise<void>;
   isGenerating: boolean;
   chordProgressions: string[];
   currentKey: string;
   setCurrentKey: (key: string) => void;
+  isFetchingChords: boolean;
+  selectedChordProgression?: string;
+  setSelectedChordProgression: (value: string | undefined) => void;
+  midiExamples: string[];
+  selectedMidiExample: string;
+  setSelectedMidiExample: (value: string) => void;
+  bpm: number;
+  gridResolution: number;
+  setGridResolution: (value: number) => void;
 }
 
 export function ControlsPanel({
-  measures, setMeasures, cellPx, setCellPx, verticalZoom, setVerticalZoom,
-  selectedNote, onRemoveNote, onUpdateNote, onGenerateMelody, isGenerating,
-  chordProgressions, currentKey, setCurrentKey
+  measures,
+  setMeasures,
+  cellPx,
+  setCellPx,
+  verticalZoom,
+  setVerticalZoom,
+  selectedNote,
+  onRemoveNote,
+  onUpdateNote,
+  onGenerateMelody,
+  isGenerating,
+  chordProgressions,
+  currentKey,
+  setCurrentKey,
+  isFetchingChords,
+  selectedChordProgression,
+  setSelectedChordProgression,
+  midiExamples,
+  selectedMidiExample,
+  setSelectedMidiExample,
+  bpm,
+  gridResolution,
+  setGridResolution,
 }: ControlsPanelProps) {
   const [prompt, setPrompt] = useState('dark trap melody');
   const [useExample, setUseExample] = useState(true);
-  const [selectedChordProgression, setSelectedChordProgression] = useState<string | undefined>(undefined);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [intensifyDarkness, setIntensifyDarkness] = useState(false);
+
+  const progressionOptions = Array.isArray(chordProgressions) ? chordProgressions : [];
+  const midiOptions = Array.isArray(midiExamples) ? midiExamples : [];
+  const selectedMidiOption = selectedMidiExample ?? '';
 
   useEffect(() => {
-    if (chordProgressions.length > 0) {
-      setSelectedChordProgression(chordProgressions[0]);
-    } else {
-      setSelectedChordProgression(undefined);
+    if (!selectedMidiOption && midiOptions.length > 0) {
+      setSelectedMidiExample(midiOptions[0]);
     }
-  }, [chordProgressions]);
+  }, [midiOptions, selectedMidiOption, setSelectedMidiExample]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isGenerating || (!prompt && !youtubeUrl)) return;
-    await onGenerateMelody(prompt, useExample, selectedChordProgression, youtubeUrl);
+    await onGenerateMelody(
+      prompt,
+      currentKey,
+      useExample,
+      selectedChordProgression,
+      youtubeUrl,
+      undefined,
+      DEFAULT_MEASURES,
+      bpm,
+      intensifyDarkness,
+      gridResolution,
+    );
   };
 
   return (
@@ -74,6 +128,36 @@ export function ControlsPanel({
           <div className="space-y-2">
             <Label htmlFor="v-zoom">Zoom pionowy</Label>
             <Slider id="v-zoom" value={[verticalZoom]} onValueChange={([v]) => setVerticalZoom(v)} min={0.5} max={2.5} step={0.1} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Kwantyzacja</CardTitle>
+          <CardDescription>Dokładność przyciągania nut do siatki</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="grid-resolution">Grid: {getGridLabel(gridResolution)}</Label>
+            <Select
+              value={gridResolution.toString()}
+              onValueChange={value => setGridResolution(parseFloat(value))}
+            >
+              <SelectTrigger id="grid-resolution">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GRID_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value.toString()}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Mniejsze wartości = dokładniejsza siatka (więcej linii)
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -148,13 +232,38 @@ export function ControlsPanel({
             </div>
              <div className="space-y-2">
               <Label>Progresja Akordów</Label>
-              <Select onValueChange={setSelectedChordProgression} value={selectedChordProgression} disabled={!!youtubeUrl}>
+              <Select
+                onValueChange={value => setSelectedChordProgression(value)}
+                value={selectedChordProgression}
+                disabled={!!youtubeUrl || isFetchingChords}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Wybierz progresję..." />
+                  <SelectValue placeholder={isFetchingChords ? 'Ładowanie...' : 'Wybierz progresję...'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {chordProgressions.map((prog, i) => (
-                    <SelectItem key={i} value={prog}>{prog}</SelectItem>
+                  {progressionOptions.map((prog, i) => (
+                    <SelectItem key={i} value={prog}>
+                      {prog}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Przykład MIDI</Label>
+              <Select
+                onValueChange={value => setSelectedMidiExample(value)}
+                value={selectedMidiOption}
+                disabled={!!youtubeUrl || midiOptions.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={midiOptions.length === 0 ? 'Brak plików MIDI' : 'Wybierz plik MIDI...'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {midiOptions.map(file => (
+                    <SelectItem key={file} value={file}>
+                      {file}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -162,6 +271,10 @@ export function ControlsPanel({
             <div className="flex items-center space-x-2">
                 <Switch id="use-example-mode" checked={useExample} onCheckedChange={setUseExample} disabled={!!youtubeUrl} />
                 <Label htmlFor="use-example-mode" className={cn(!!youtubeUrl && "text-muted-foreground")}>Użyj istniejącej melodii jako przykładu</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+                <Switch id="intensify-darkness" checked={intensifyDarkness} onCheckedChange={setIntensifyDarkness} />
+                <Label htmlFor="intensify-darkness">Wzmocnij mroczny klimat</Label>
             </div>
           </CardContent>
           <CardFooter>

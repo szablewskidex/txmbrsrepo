@@ -1,0 +1,77 @@
+[
+  {
+    "prompt": "almost no changes, just same pattern",
+    "key": "D# minor",
+    "measures": 16,
+    "tempo": 150,
+    "gridResolution": 0.25,
+    "chordProgression": "",
+    "intensifyDarkness": false,
+    "reason": "prompt_mismatch",
+    "signature": "a6b46700da1e23d8c2b982ee65ff0ae5fe02d015",
+    "timestamp": "2025-10-20T03:30:11.861Z"
+  },
+  {
+    "prompt": "dark minor, Half Time,",
+    "key": "C minor",
+    "measures": 8,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "chordProgression": "",
+    "intensifyDarkness": false,
+    "reason": "quality",
+    "notes": "zbyt wesołe",
+    "signature": "db6c4be0d5dd7477e01e7533dbf9caccae08ec88",
+    "timestamp": "2025-10-20T02:41:48.086Z"
+  },
+  {
+    "prompt": "Forge an ominous, downtuned guitar arpeggio in F# minor at 144 BPM with relentless tension, chromatic passing tones, and palm-muted syncopation that feels like a ritual in a cavern.",
+    "key": "F# minor",
+    "measures": 8,
+    "tempo": 144,
+    "gridResolution": 0.16666666666666666,
+    "chordProgression": "",
+    "intensifyDarkness": false,
+    "reason": "prompt_mismatch",
+    "signature": "7de6be4d98d9339f132984f6b5b773906b0a6e3f",
+    "timestamp": "2025-10-20T02:25:24.985Z"
+  },
+  {
+    "prompt": "guitar vibe melody, just chords, more strum",
+    "key": "D major",
+    "measures": 8,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "chordProgression": "",
+    "intensifyDarkness": false,
+    "reason": "prompt_mismatch",
+    "signature": "bff26491e03f97efc39d8e62b9a09b2729fc2f4a",
+    "timestamp": "2025-10-20T01:18:00.459Z"
+  },
+  {
+    "prompt": "dark",
+    "key": "C minor",
+    "measures": 16,
+    "tempo": 140,
+    "gridResolution": 0.16666666666666666,
+    "chordProgression": "",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "notes": "zbyt jasna tonacja",
+    "signature": "602ff8937556a0647f355c21c34832ecc933a88a",
+    "timestamp": "2025-10-20T00:35:26.820Z"
+  },
+  {
+    "prompt": "dark minor vibe, bouncy melody, lil durk type chords",
+    "key": "A minor",
+    "measures": 8,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "chordProgression": "",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "notes": "zbyt jasna tonacja",
+    "signature": "88174219e86f8f1fa6c990a0fedb8c9d08940198",
+    "timestamp": "2025-10-20T00:25:47.063Z"
+  }
+]

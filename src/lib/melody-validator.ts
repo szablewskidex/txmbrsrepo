@@ -84,7 +84,12 @@ function snapToScale(noteName: string, key: string, scaleType: keyof typeof SCAL
  */
 function quantize(value: number, gridSize: number = 0.25): number {
   if (gridSize <= 0) return value;
-  return Math.round(value / gridSize) * gridSize;
+
+  const multiplier = 1 / gridSize;
+  const steps = Math.round(value * multiplier);
+  const quantized = steps / multiplier;
+
+  return Number(quantized.toFixed(6));
 }
 
 /**
@@ -112,6 +117,7 @@ export function validateAndCorrectMelody(
     maxInterval?: number; // maksymalny skok melodyczny w półtonach
     removeDuplicates?: boolean;
     ensureMinNotes?: number; // NOWA OPCJA
+    allowChromatic?: boolean;
   } = {}
 ): MelodyNote[] {
   const {
@@ -122,30 +128,54 @@ export function validateAndCorrectMelody(
     maxInterval = 12, // maksymalnie oktawa
     removeDuplicates = true,
     ensureMinNotes = 0,
+    allowChromatic = false,
   } = options;
 
   if (!notes || notes.length === 0) {
       return [];
   }
 
-  const scaleType = key.includes('major') ? 'major' : 'minor';
+  const scaleType = key.includes('major') ? 'major' : allowChromatic ? 'harmonicMinor' : 'minor';
   let processedNotes = [...notes];
 
   // 1. Sortuj po czasie przed przetwarzaniem
   processedNotes.sort((a, b) => a.start - b.start);
 
-  // 2. Filtruj nuty poza zakresem czasu
-  processedNotes = processedNotes.filter(note => {
-    return note.start >= 0 && (note.start + note.duration) <= maxDuration;
-  });
+  // 2. Usuń nuty rozpoczynające się poza zakresem i przytnij wystające zakończenia
+  processedNotes = processedNotes
+    .filter(note => note.start >= 0 && note.start < maxDuration)
+    .map(note => {
+      const remaining = maxDuration - note.start;
+      if (remaining <= 0) {
+        return { ...note, duration: 0 };
+      }
+      return {
+        ...note,
+        duration: Math.min(note.duration, remaining),
+      };
+    })
+    .filter(note => note.duration > 0);
 
   // 3. Quantize timing
   if (quantizeGrid > 0) {
-    processedNotes = processedNotes.map(note => ({
-      ...note,
-      start: quantize(note.start, quantizeGrid),
-      duration: Math.max(quantizeGrid, quantize(note.duration, quantizeGrid)),
-    }));
+    processedNotes = processedNotes
+      .map(note => ({
+        ...note,
+        start: quantize(note.start, quantizeGrid),
+        duration: Math.max(quantizeGrid, quantize(note.duration, quantizeGrid)),
+      }))
+      .map(note => {
+        const clampedEnd = Math.min(note.start + note.duration, maxDuration);
+        const adjustedDuration = clampedEnd - note.start;
+        if (adjustedDuration <= 0) {
+          return { ...note, duration: 0 };
+        }
+        return {
+          ...note,
+          duration: adjustedDuration,
+        };
+      })
+      .filter(note => note.duration > 0);
   }
 
   // 4. Korekcja do skali

@@ -6,18 +6,21 @@
  * - suggestChordProgressions - A function that suggests chord progressions for a given key.
  */
 
+import { createHash } from 'crypto';
+
 import {ai} from '@/ai/genkit';
-import { 
-    SuggestChordProgressionsInputSchema, 
-    SuggestChordProgressionsOutputSchema, 
-    type SuggestChordProgressionsInput, 
-    type SuggestChordProgressionsOutput 
+import {
+  SuggestChordProgressionsInputSchema,
+  SuggestChordProgressionsOutputSchema,
+  type SuggestChordProgressionsInput,
+  type SuggestChordProgressionsOutput,
 } from '@/lib/schemas';
+import { findLocalChordProgressions } from '@/data/chord-progressions';
 
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
-const chordProgressionCache = new Map<string, { 
-  data: string[], 
-  timestamp: number 
+const chordProgressionCache = new Map<string, {
+  data: string[],
+  timestamp: number,
 }>();
 
 
@@ -25,16 +28,41 @@ const suggestChordProgressionsPrompt = ai.definePrompt({
   name: 'suggestChordProgressionsPrompt',
   input: {schema: SuggestChordProgressionsInputSchema},
   output: {schema: SuggestChordProgressionsOutputSchema},
-  prompt: `You are a music theory expert specializing in modern trap and hip-hop. Suggest 3 compelling chord progressions for the key of {{{key}}}. 
+  prompt: `You are a music theory expert specializing in modern music production across all genres.
 
-The first progression should be the most common and effective. The next two can be more creative.
+**Task:** Suggest 10 diverse chord progressions for the key of {{{key}}}.
 
-Here are some examples of the desired style for 'A minor':
-- "Am-G-C-F" (a classic 1-b7-b3-b6)
-- "Am-F-C-G" (a variation of the above)
-- "Am-Dm-E-Am" (a more dramatic, classical feel)
+{{#if prompt}}
+**Style Context:** {{{prompt}}}
 
-Return the result as a JSON object with a "chordProgressions" key containing an array of strings. The most conventional and strong progression should be first in the array.`,
+Based on this prompt, tailor your suggestions:
+- For "trap", "hip-hop", "bass" → prefer simple 2-4 chord loops (e.g., "Am-F", "C#m-G#m")
+- For "dark", "ominous", "sinister" → include diminished, augmented, and 7th chords (e.g., "Am-F-E7-Am", "Dm-Bbdim-Gm-A7")
+- For "minimal", "sparse" → suggest repetitive patterns (e.g., "Cm-Cm-Cm-Cm", "Em-G-Em-G")
+- For "complex", "jazz", "fusion" → use extended harmonies and longer progressions (e.g., "Dm7-G7-Cmaj7-Am7-D7-Gm7-C7-Fmaj7")
+- For "cinematic", "epic" → include dramatic progressions with modal interchange
+- For "upbeat", "happy" → stick to major triads and suspended chords
+{{else}}
+**No specific style given** - provide a balanced mix of:
+- 3 simple/common progressions (good for beginners)
+- 4 intermediate progressions (interesting but not too complex)
+- 3 advanced/creative progressions (for experienced producers)
+{{/if}}
+
+**Requirements:**
+1. All progressions MUST be in {{{key}}} (use the correct scale degrees)
+2. Vary the length: include both short (2-3 chords) and long (4-6 chords) progressions
+3. Each progression should be unique and musically interesting
+4. Format: "Chord1-Chord2-Chord3-..." (e.g., "Am-G-F-E")
+5. First 3 progressions should be the strongest/most usable
+
+**Examples for 'A minor':**
+- Trap/Simple: "Am-G", "Am-F-C-G"
+- Dark: "Am-F-E7-Am", "Am-Dm-Bb-E"
+- Complex: "Am-Dm7-G7-Cmaj7-Fmaj7-Bm7b5-E7"
+- Minimal: "Am-Am-Am-Am", "Am-Em-Am-Em"
+
+Return exactly 10 progressions as a JSON object with "chordProgressions" array.`,
 });
 
 const suggestChordProgressionsFlow = ai.defineFlow(
@@ -53,41 +81,56 @@ const suggestChordProgressionsFlow = ai.defineFlow(
   }
 );
 
-async function getCachedChordProgressions(key: string): Promise<string[]> {
-  const cached = chordProgressionCache.get(key);
+async function getCachedChordProgressions(key: string, prompt?: string): Promise<string[]> {
+  const normalizedKey = key.trim();
+  const normalizedPrompt = prompt?.trim() ?? '';
+  const promptForCacheKey = normalizedPrompt.toLowerCase();
+  const cacheKey = `${normalizedKey}|${promptForCacheKey}`;
+  const cached = chordProgressionCache.get(cacheKey);
   const now = Date.now();
 
   if (cached && (now - cached.timestamp) < CACHE_TTL) {
-    console.log(`Cache hit for key: ${key}.`);
+    console.log(`Cache hit for key: ${normalizedKey} (prompt hash: ${promptForCacheKey ? createHash('sha1').update(promptForCacheKey).digest('hex').slice(0, 8) : 'none'}).`);
     return cached.data;
   }
-  
-  console.log(`Cache miss for key: ${key}. Fetching from AI...`);
+
+  const hasPrompt = promptForCacheKey.length > 0;
+
+  console.log(`[SUGGEST_CHORDS] Fetching AI suggestions for key: ${normalizedKey}${normalizedPrompt ? ` (prompt: ${normalizedPrompt.slice(0, 40)}${normalizedPrompt.length > 40 ? '…' : ''})` : ''}`);
   try {
-    const suggestions = await suggestChordProgressionsFlow({ key });
-    
+    const suggestions = await suggestChordProgressionsFlow({ key: normalizedKey, prompt: hasPrompt ? normalizedPrompt : undefined });
+
     // Robust check to prevent crash
     if (suggestions && suggestions.chordProgressions && suggestions.chordProgressions.length > 0) {
-      chordProgressionCache.set(key, { 
+      chordProgressionCache.set(cacheKey, {
         data: suggestions.chordProgressions, 
         timestamp: now 
       });
       return suggestions.chordProgressions;
     }
-    
-    // If AI returns no suggestions, or an invalid format, return empty and don't cache
-    console.warn(`[SUGGEST_CHORDS] AI returned no valid suggestions for key "${key}".`);
+
+    console.warn(`[SUGGEST_CHORDS] AI returned no valid suggestions for key "${normalizedKey}". Trying local fallback.`);
+    const localFallback = findLocalChordProgressions(normalizedKey);
+    if (localFallback && localFallback.length > 0) {
+      chordProgressionCache.set(cacheKey, { data: localFallback, timestamp: now });
+      return localFallback;
+    }
     return [];
 
   } catch (error) {
-      console.error(`[SUGGEST_CHORDS] Error fetching suggestions for key "${key}":`, error);
-      // In case of any error, return an empty array to prevent crashing the main flow
+      console.error(`[SUGGEST_CHORDS] Error fetching suggestions for key "${normalizedKey}":`, error);
+      const localFallback = findLocalChordProgressions(normalizedKey);
+      if (localFallback && localFallback.length > 0) {
+        console.log(`[SUGGEST_CHORDS] Using local progressions as error fallback for key "${normalizedKey}".`);
+        chordProgressionCache.set(cacheKey, { data: localFallback, timestamp: now });
+        return localFallback;
+      }
       return [];
   }
 }
 
 
 export async function suggestChordProgressions(input: SuggestChordProgressionsInput): Promise<SuggestChordProgressionsOutput> {
-  const progressions = await getCachedChordProgressions(input.key);
+  const progressions = await getCachedChordProgressions(input.key, input.prompt);
   return { chordProgressions: progressions };
 }

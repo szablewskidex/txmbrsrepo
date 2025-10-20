@@ -17,6 +17,7 @@ interface GridProps {
   onUpdateNote: (id: number, patch: Partial<Note>) => void;
   getNote: (id: number) => Note | undefined;
   onSelectNote: (id: number | null) => void;
+  gridResolution: number;
 }
 
 type DragState = {
@@ -39,6 +40,7 @@ export function Grid({
   onUpdateNote,
   getNote,
   onSelectNote,
+  gridResolution,
 }: GridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -108,6 +110,10 @@ export function Grid({
 
   const gridWidth = beats * cellPx;
   const gridHeight = PIANO_KEYS.length * ROW_HEIGHT * verticalZoom;
+  const beatsPerMeasure = 4;
+  const majorGridSize = cellPx * beatsPerMeasure;
+  const minorGridSize = cellPx;
+  const subdivisionSize = cellPx * gridResolution;
 
   return (
     <div
@@ -116,13 +122,19 @@ export function Grid({
       style={{
         width: gridWidth,
         height: gridHeight,
-        backgroundSize: `${cellPx * 4}px ${ROW_HEIGHT * verticalZoom * 12}px, ${cellPx}px ${ROW_HEIGHT * verticalZoom}px`,
         backgroundImage: `
-          linear-gradient(to right, hsl(var(--border) / 0.7) 1px, transparent 1px),
-          linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px),
-          linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+          linear-gradient(to right, hsl(var(--border) / 0.8) 2px, transparent 2px),
+          linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+          linear-gradient(to right, hsl(var(--border) / 0.2) 1px, transparent 1px),
           linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)
         `,
+        backgroundSize: `
+          ${majorGridSize}px 100%,
+          ${minorGridSize}px 100%,
+          ${subdivisionSize}px 100%,
+          100% ${ROW_HEIGHT * verticalZoom}px
+        `,
+        backgroundPosition: '0 0, 0 0, 0 0, 0 0',
       }}
       onClick={handleGridClick}
       onMouseDown={(e) => {

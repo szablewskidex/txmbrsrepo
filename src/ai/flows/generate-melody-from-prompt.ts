@@ -1,10 +1,206 @@
+"use server";
 
-'use server';
+interface NoteLike {
+  note: string;
+  start: number;
+  duration: number;
+  velocity: number;
+  slide: boolean;
+}
+
+function normalizeKeyLabel(key?: string): string | undefined {
+  if (!key) return undefined;
+  const match = key.match(/([a-g][b#]?)[\s-]*(major|minor)/i);
+  if (!match) return undefined;
+  const tonic = match[1].toUpperCase();
+  const mode = match[2].toLowerCase();
+  return `${tonic}-${mode}`;
+}
+
+function parseKeyInfo(key?: string): { tonic: string; mode: 'major' | 'minor' } | undefined {
+  const normalized = normalizeKeyLabel(key);
+  if (!normalized) return undefined;
+  const [tonic, mode] = normalized.split('-');
+  if (!tonic || !mode) return undefined;
+  return { tonic, mode: mode === 'major' ? 'major' : 'minor' };
+}
+
+function extractTempoFromPromptText(prompt?: string): number | undefined {
+  if (!prompt) return undefined;
+  const match = prompt.match(/(\d{2,3})\s*(?:bpm|beats?\s*per\s*minute)/i);
+  if (match) {
+    const tempo = Number(match[1]);
+    if (!Number.isNaN(tempo)) {
+      return tempo;
+    }
+  }
+  return undefined;
+}
+
+function extractKeywordsFromPrompt(prompt?: string): string[] {
+  if (!prompt) {
+    return [];
+  }
+
+  const tokens = prompt
+    .toLowerCase()
+    .split(/[^a-z0-9#+]+/)
+    .map(token => token.trim())
+    .filter(Boolean)
+    .filter(token => token.length >= 2 || /\d/.test(token))
+    .filter(token => !KEYWORD_STOP_WORDS.has(token));
+
+  const unique = Array.from(new Set(tokens));
+  return unique;
+}
+
+function getExampleTempo(example: TrainingExample): number | undefined {
+  return example.metadata?.tempo
+    ?? example.input?.tempo
+    ?? (typeof example.metadata?.metrics === 'object' && example.metadata?.metrics !== null
+      ? Number((example.metadata?.metrics as Record<string, unknown>).tempo)
+      : undefined);
+}
+
+function exampleMatchesInstrument(example: TrainingExample, instrument?: InstrumentFocus): boolean {
+  if (!instrument) return true;
+  const promptInstrument = detectInstrumentFromPrompt(example.input?.prompt ?? '');
+  if (promptInstrument === instrument) {
+    return true;
+  }
+  const metadataInstrument = typeof example.metadata?.instrument === 'string' ? example.metadata.instrument.toLowerCase() : '';
+  if (metadataInstrument.includes(instrument)) {
+    return true;
+  }
+  const source = typeof example.metadata?.source === 'string' ? example.metadata.source.toLowerCase() : '';
+  return source.includes(instrument);
+}
+
+function detectExampleMood(example: TrainingExample): Mood {
+  return getMoodFromPrompt(example.input?.prompt ?? '', false);
+}
+
+function computeExampleScore(example: TrainingExample, context: FewShotContext, fallbackIndex: number): { score: number; tempoDelta: number; example: TrainingExample } {
+  const targetKey = parseKeyInfo(context.key);
+  const exampleKey = parseKeyInfo(example.input?.key ?? example.metadata?.source as string | undefined);
+  const providedTempo = context.tempo ?? extractTempoFromPromptText(context.prompt);
+  const exampleTempo = getExampleTempo(example);
+  const targetMood = context.mood;
+  const exampleMood = detectExampleMood(example);
+
+  let score = 0;
+
+  if (context.instrument) {
+    if (exampleMatchesInstrument(example, context.instrument)) {
+      score += 5;
+    }
+  }
+
+  if (targetKey && exampleKey) {
+    if (targetKey.tonic === exampleKey.tonic && targetKey.mode === exampleKey.mode) {
+      score += 4;
+    } else if (targetKey.tonic === exampleKey.tonic) {
+      score += 3;
+    } else if (targetKey.mode === exampleKey.mode) {
+      score += 1;
+    }
+  }
+
+  if (targetMood && exampleMood === targetMood) {
+    score += 2;
+  }
+
+  const tempoDelta = exampleTempo && providedTempo
+    ? Math.abs(exampleTempo - providedTempo)
+    : Number.MAX_SAFE_INTEGER;
+
+  if (exampleTempo && providedTempo) {
+    const tempoScore = Math.max(0, 3 - Math.abs(exampleTempo - providedTempo) / 20);
+    score += tempoScore;
+  }
+
+  if (context.prompt) {
+    const promptLower = context.prompt.toLowerCase();
+    if (promptLower.includes('arpeggio') || promptLower.includes('arp')) {
+      const examplePrompt = example.input?.prompt?.toLowerCase() ?? '';
+      if (examplePrompt.includes('arpeggio') || examplePrompt.includes('arp')) {
+        score += 1.5;
+      }
+    }
+  }
+
+  // Small tie-breaker to prefer earlier dataset entries when scores tie
+  score -= fallbackIndex * 0.0001;
+
+  return { score, tempoDelta, example };
+}
+
+function safeValidateLayer(enabled: boolean, notes: MelodyNote[], key: string, options: ValidateOptions): MelodyNote[] {
+  if (!enabled) {
+    return [];
+  }
+  if (!Array.isArray(notes) || notes.length === 0) {
+    return [];
+  }
+  return validateAndCorrectMelody(notes, key, options);
+}
+
+function applyGuitarStrum(notes: NoteLike[], direction: 'up' | 'down', step: number, velocitySwing = 6): NoteLike[] {
+  if (notes.length === 0) {
+    return notes;
+  }
+
+  const groupedByStart = new Map<number, NoteLike[]>();
+  notes.forEach(note => {
+    const key = Number(note.start.toFixed(6));
+    const group = groupedByStart.get(key) ?? [];
+    group.push(note);
+    groupedByStart.set(key, group);
+  });
+
+  const result: NoteLike[] = [];
+
+  groupedByStart.forEach(group => {
+    if (group.length <= 1) {
+      result.push(...group.map(n => ({ ...n, slide: Boolean(n.slide) })));
+      return;
+    }
+
+    const sorted = [...group].sort((a, b) => a.note.localeCompare(b.note));
+    const ordered = direction === 'down' ? sorted.slice().reverse() : sorted;
+    ordered.forEach((note, index) => {
+      const offset = step * index;
+      result.push({
+        ...note,
+        start: note.start + offset,
+        velocity: Math.max(1, Math.min(127, note.velocity + ((index % 2 === 0 ? 1 : -1) * velocitySwing))),
+        slide: Boolean(note.slide),
+      });
+    });
+  });
+
+  return result
+    .sort((a, b) => a.start - b.start || a.note.localeCompare(b.note))
+    .map(note => ({
+      ...note,
+      slide: Boolean(note.slide),
+    }));
+}
+
+function shouldSkipStrum(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return lower.includes('no strum') || lower.includes('bez strum');
+}
+
 /**
  * @fileOverview AI melody generation flow with improved prompt engineering.
  *
  * - generateMelodyFromPrompt - A function that generates a melody based on a text prompt.
  */
+
+import fs from 'fs';
+import path from 'path';
+import {createHash} from 'crypto';
 
 import {ai} from '@/ai/genkit';
 import {z} from 'zod';
@@ -14,10 +210,434 @@ import {
   GenerateFullCompositionOutputSchema,
   type GenerateMelodyInput, 
   type GenerateFullCompositionOutput,
-  MelodyNoteSchema,
   type MelodyNote,
 } from '@/lib/schemas';
 import { validateAndCorrectMelody, analyzeMelody } from '@/lib/melody-validator';
+
+interface TrainingExample {
+  input?: {
+    prompt?: string;
+    key?: string;
+    tempo?: number;
+    measures?: number;
+    chordProgression?: string;
+  };
+  output?: {
+    melody?: Array<{ note?: string; start?: number; duration?: number; velocity?: number; slide?: boolean }>;
+  };
+  metadata?: {
+    source?: string;
+    instrument?: string;
+    tempo?: number;
+    style?: string;
+    metrics?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+}
+
+const DARK_KEYWORDS = ['dark', 'mrocz', 'ominous', 'gloom', 'brood', 'haunt', 'evil', 'sinister', 'melanch', 'noir'];
+const BRIGHT_KEYWORDS = ['happy', 'bright', 'joy', 'uplift', 'sunny', 'energetic', 'funky'];
+const KEYWORD_STOP_WORDS = new Set([
+  'the', 'and', 'with', 'that', 'this', 'into', 'from', 'your', 'feel', 'like', 'make',
+  'melody', 'music', 'song', 'track', 'riff', 'beat', 'style', 'vibe', 'sound', 'tempo',
+  'bpm', 'minor', 'major', 'slow', 'fast', 'dark', 'bright', 'guitar', 'piano', 'bass', 'strings', 'synth',
+  'in', 'at', 'for', 'on', 'by', 'of', 'to', 'a', 'an', 'is', 'are', 'be', 'it', 'as', 'up', 'down', 'soft', 'hard',
+]);
+
+const DEFAULT_MINOR_PROGRESSIONS = [
+  'Am-G-F-E',
+  'Am-F-Dm-E',
+  'Dm-Bb-Gm-A',
+  'Em-C-Am-B7',
+  'Am-Em-F-G',
+  'Am-C-G-F',
+  'Dm-Am-Bb-G',
+];
+const DARK_MINOR_PROGRESSIONS = [
+  'Am-F-E7-Am',
+  'Dm-Bb-Gm-A',
+  'Cm-Ab-G-Gm',
+  'Bm-G-Em-F#',
+  'Em-C-Am-B7',
+  'Fm-Db-Ebm-C',
+  'Gm-Eb-F-D',
+  'Cm-G-Ab-Bb',
+];
+const DEFAULT_MAJOR_PROGRESSIONS = [
+  'C-G-Am-F',
+  'C-F-Am-G',
+  'G-D-Em-C',
+  'F-C-Dm-Bb',
+  'C-Am-F-G',
+  'C-Dm-Am-G',
+  'F-G-Em-Am',
+];
+
+type Mood = 'dark' | 'bright' | 'neutral';
+type InstrumentFocus = 'piano' | 'guitar' | 'strings' | 'synth' | 'bass';
+
+type FewShotContext = {
+  instrument?: InstrumentFocus;
+  key?: string;
+  mood?: Mood;
+  prompt?: string;
+  tempo?: number;
+  keywords?: string[];
+};
+
+type ValidateOptions = Parameters<typeof validateAndCorrectMelody>[2];
+
+function promptContainsKeyword(prompt: string, keywords: string[]): boolean {
+  const lower = prompt.toLowerCase();
+  return keywords.some(keyword => lower.includes(keyword));
+}
+
+function getMoodFromPrompt(prompt: string, intensifyDarkness?: boolean): Mood {
+  if (intensifyDarkness || promptContainsKeyword(prompt, DARK_KEYWORDS)) {
+    return 'dark';
+  }
+  if (promptContainsKeyword(prompt, BRIGHT_KEYWORDS)) {
+    return 'bright';
+  }
+  return 'neutral';
+}
+
+function detectInstrumentFromPrompt(prompt: string): InstrumentFocus | undefined {
+  const lower = prompt.toLowerCase();
+  if (/(grand|upright|felt)?\s?piano|keys|keyboard|rhodes|keyscape/.test(lower)) {
+    return 'piano';
+  }
+  if (/guitar|strum|acoustic|electric|nylon|six-string|strat|les paul/.test(lower)) {
+    return 'guitar';
+  }
+  if (/string ensemble|strings|violin|cello|orchestral/.test(lower)) {
+    return 'strings';
+  }
+  if (/synth|pad|plucks|lead synth|analog/.test(lower)) {
+    return 'synth';
+  }
+  if (/bass guitar|slap bass|808|sub bass/.test(lower)) {
+    return 'bass';
+  }
+  return undefined;
+}
+
+function pickProgressionFromList(list: string[], seed: string, key: string): string {
+  if (list.length === 0) {
+    return 'Am-G-F-E';
+  }
+  const hash = createHash('sha256').update(`${seed}|${key}`).digest('hex');
+  const baseIndex = parseInt(hash.slice(0, 8), 16) % list.length;
+  const randomOffset = list.length > 1 ? Math.floor(Math.random() * Math.min(list.length, 3)) : 0;
+  const index = (baseIndex + randomOffset) % list.length;
+  return list[index];
+}
+
+function filterSuggestionsByMood(suggestions: string[], mood: Mood, prompt: string, instrument?: InstrumentFocus): string[] {
+  if (suggestions.length === 0) {
+    return suggestions;
+  }
+  const promptLower = prompt.toLowerCase();
+
+  const TRAP_KEYWORDS = ['trap', 'hip-hop', 'hip hop', 'bass'];
+  const MINIMAL_KEYWORDS = ['minimal', 'sparse', 'simple'];
+  const COMPLEX_KEYWORDS = ['complex', 'jazz', 'fusion', 'chromatic'];
+
+  if (instrument === 'guitar') {
+    const guitarFriendly = suggestions.filter(prog => {
+      const chords = prog.split('-').filter(Boolean);
+      return chords.length <= 4;
+    });
+    if (guitarFriendly.length > 0) {
+      return guitarFriendly;
+    }
+  }
+
+  if (instrument === 'piano') {
+    const pianoFriendly = suggestions.filter(prog => {
+      const chords = prog.split('-').filter(Boolean);
+      return chords.length >= 4 || /maj7|sus|dim|add|m7|7/.test(prog.toLowerCase());
+    });
+    if (pianoFriendly.length > 0) {
+      return pianoFriendly;
+    }
+  }
+
+  if (TRAP_KEYWORDS.some(kw => promptLower.includes(kw))) {
+    const simple = suggestions.filter(prog => prog.split('-').filter(Boolean).length <= 3);
+    if (simple.length > 0) {
+      return simple;
+    }
+  }
+
+  if (MINIMAL_KEYWORDS.some(kw => promptLower.includes(kw))) {
+    const repetitive = suggestions.filter(prog => {
+      const chords = prog.split('-').map(c => c.trim()).filter(Boolean);
+      return new Set(chords).size <= 3;
+    });
+    if (repetitive.length > 0) {
+      return repetitive;
+    }
+  }
+
+  if (COMPLEX_KEYWORDS.some(kw => promptLower.includes(kw))) {
+    const complex = suggestions.filter(prog => prog.split('-').filter(Boolean).length >= 5);
+    if (complex.length > 0) {
+      return complex;
+    }
+  }
+
+  const darkFilter = (prog: string) => /m|dim|sus|#|7/i.test(prog);
+  if (mood === 'dark') {
+    const filtered = suggestions.filter(darkFilter);
+    return filtered.length > 0 ? filtered : suggestions;
+  }
+  if (mood === 'bright') {
+    const filtered = suggestions.filter(prog => !darkFilter(prog));
+    return filtered.length > 0 ? filtered : suggestions;
+  }
+  return suggestions;
+}
+
+function selectChordProgressionForPrompt(prompt: string, key: string, mood: Mood, suggestions?: string[], instrument?: InstrumentFocus): string[] {
+  const normalizedKey = key.toLowerCase();
+  const isMinorKey = normalizedKey.includes('minor');
+
+  const filteredSuggestions = suggestions?.length ? filterSuggestionsByMood(suggestions, mood, prompt, instrument) : undefined;
+  const pool = filteredSuggestions && filteredSuggestions.length > 0
+    ? filteredSuggestions
+    : mood === 'dark' || isMinorKey
+      ? (isMinorKey ? DARK_MINOR_PROGRESSIONS : DEFAULT_MINOR_PROGRESSIONS)
+      : DEFAULT_MAJOR_PROGRESSIONS;
+
+  if (pool.length <= 2) {
+    return [pickProgressionFromList(pool, `${prompt}|sectionA`, key)];
+  }
+
+  const first = pickProgressionFromList(pool, `${prompt}|sectionA`, key);
+  let remaining = pool.filter(p => p !== first);
+  if (remaining.length === 0) {
+    remaining = pool;
+  }
+  const second = pickProgressionFromList(remaining, `${prompt}|sectionB`, key);
+  remaining = remaining.filter(p => p !== second);
+  const third = pickProgressionFromList(remaining.length > 0 ? remaining : pool, `${prompt}|sectionC`, key);
+
+  return [first, second, third];
+}
+
+// ============================================================================
+// LAYER DETECTION FROM PROMPT
+// ============================================================================
+
+type Layer = 'melody' | 'chords' | 'bassline';
+
+function detectLayersFromPrompt(prompt: string): Layer[] | undefined {
+  const lower = prompt.toLowerCase();
+
+  // Sprawdź czy są słowa kluczowe typu "just", "only", "without", "skip"
+  const hasJust = /\b(just|only|solely)\b/i.test(lower);
+  const hasWithout = /\b(without|skip|no)\b/i.test(lower);
+
+  // Wykryj które warstwy są wymienione
+  const hasBassline = /\b(bass|bassline|bass line)\b/i.test(lower);
+  const hasChords = /\b(chord|chords|harmony|harmonic)\b/i.test(lower);
+  const hasMelody = /\b(melody|melodic|lead|top line)\b/i.test(lower);
+
+  // Przypadek 1: "just bassline" → tylko bas
+  if (hasJust) {
+    const layers: Layer[] = [];
+    if (hasBassline) layers.push('bassline');
+    if (hasChords) layers.push('chords');
+    if (hasMelody) layers.push('melody');
+
+    // Jeśli coś znaleziono, zwróć tylko to
+    if (layers.length > 0) {
+      console.log('[LAYER_DETECT] Detected layers from prompt:', layers);
+      return layers;
+    }
+  }
+
+  // Przypadek 2: "without chords" → wszystko oprócz akordów
+  if (hasWithout) {
+    const allLayers: Layer[] = ['melody', 'chords', 'bassline'];
+    const excluded: Layer[] = [];
+
+    if (hasBassline) excluded.push('bassline');
+    if (hasChords) excluded.push('chords');
+    if (hasMelody) excluded.push('melody');
+
+    if (excluded.length > 0) {
+      const result = allLayers.filter(l => !excluded.includes(l));
+      console.log('[LAYER_DETECT] Excluding layers:', excluded, 'Result:', result);
+      return result;
+    }
+  }
+
+  // Przypadek 3: brak słów kluczowych → wszystkie warstwy
+  console.log('[LAYER_DETECT] No layer keywords found, generating all layers');
+  return undefined; // undefined = wszystkie warstwy
+}
+
+let totalEstimatedTokensUsed = 0;
+
+let cachedFewShotDataset: TrainingExample[] | null = null;
+let fewShotDatasetMtime: number | null = null;
+const fewShotPromptCache = new Map<string, string | null>();
+
+function getDatasetPath(): string {
+  return path.join(process.cwd(), 'training-data', 'melody-training-dataset.json');
+}
+
+function loadFewShotDataset(): TrainingExample[] | null {
+  try {
+    const datasetPath = getDatasetPath();
+    if (!fs.existsSync(datasetPath)) {
+      cachedFewShotDataset = null;
+      fewShotDatasetMtime = null;
+      return null;
+    }
+
+    const stats = fs.statSync(datasetPath);
+    if (cachedFewShotDataset && fewShotDatasetMtime === stats.mtimeMs) {
+      return cachedFewShotDataset;
+    }
+
+    const fileContents = fs.readFileSync(datasetPath, 'utf-8');
+    const data: unknown = JSON.parse(fileContents);
+
+    if (!Array.isArray(data) || data.length === 0) {
+      cachedFewShotDataset = null;
+      fewShotDatasetMtime = stats.mtimeMs;
+      return null;
+    }
+
+    cachedFewShotDataset = data as TrainingExample[];
+    fewShotDatasetMtime = stats.mtimeMs;
+    fewShotPromptCache.clear();
+    return cachedFewShotDataset;
+  } catch (error) {
+    console.warn('[MELODY_GEN] Failed to load few-shot dataset:', error);
+    cachedFewShotDataset = null;
+    fewShotDatasetMtime = null;
+    fewShotPromptCache.clear();
+    return null;
+  }
+}
+
+export async function resetFewShotCache(): Promise<void> {
+  cachedFewShotDataset = null;
+  fewShotDatasetMtime = null;
+  fewShotPromptCache.clear();
+}
+
+function buildFewShotPrompt(examples: TrainingExample[]): string | null {
+  if (!examples.length) {
+    return null;
+  }
+
+  const serialized = examples
+    .map(example => {
+      const prompt = example.input?.prompt ?? example.metadata?.source ?? 'Unknown prompt';
+      const melodySnippet = Array.isArray(example.output?.melody)
+        ? example.output!.melody.slice(0, 8)
+        : [];
+      return `Prompt: ${prompt}\nOutput: ${JSON.stringify(melodySnippet)}`;
+    })
+    .join('\n\n');
+
+  if (!serialized) {
+    return null;
+  }
+
+  return `Here are examples of high-quality melodies:\n\n${serialized}`;
+}
+
+function selectFewShotExamples(dataset: TrainingExample[], context: FewShotContext): TrainingExample[] {
+  if (dataset.length === 0) {
+    return dataset;
+  }
+
+  const instrumentFiltered = dataset.filter(example => exampleMatchesInstrument(example, context.instrument));
+  let pool = instrumentFiltered.length > 0 ? instrumentFiltered : dataset;
+
+  if (context.keywords && context.keywords.length > 0) {
+    const keywordFiltered = pool.filter(example => {
+      const haystacks = [
+        example.metadata?.source,
+        example.input?.prompt,
+        example.metadata?.instrument,
+        example.metadata?.style,
+      ]
+        .filter(Boolean)
+        .map(value => value!.toString().toLowerCase());
+      if (haystacks.length === 0) {
+        return false;
+      }
+      return context.keywords!.some(keyword => haystacks.some(h => h.includes(keyword)));
+    });
+    if (keywordFiltered.length > 0) {
+      pool = keywordFiltered;
+    }
+  }
+
+  const scored = pool.map((example, index) => computeExampleScore(example, context, index));
+  const anyPositive = scored.some(item => item.score > 0);
+  const sorted = scored.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return a.tempoDelta - b.tempoDelta;
+  });
+
+  const selected = (anyPositive ? sorted : scored).map(item => item.example);
+  return selected.length > 0 ? selected : pool;
+}
+
+function buildFewShotCacheKey(context: FewShotContext): string {
+  return JSON.stringify({
+    instrument: context.instrument ?? 'any',
+    key: normalizeKeyLabel(context.key) ?? 'any',
+    mood: context.mood ?? 'any',
+    hasArp: context.prompt ? /(arpeggio|\barp\b)/i.test(context.prompt) : false,
+    tempo: context.tempo ?? null,
+    keywords: context.keywords ? [...context.keywords].sort() : [],
+  });
+}
+
+function getFewShotPromptForInstrument(context: FewShotContext): { prompt: string | null; total: number; filtered: number; examples: TrainingExample[] } {
+  const cacheKey = buildFewShotCacheKey(context);
+  const dataset = loadFewShotDataset();
+  if (!dataset || dataset.length === 0) {
+    fewShotPromptCache.set(cacheKey, null);
+    return {
+      prompt: null,
+      total: 0,
+      filtered: 0,
+      examples: [],
+    };
+  }
+
+  const selectedExamples = selectFewShotExamples(dataset, context);
+  const prompt = fewShotPromptCache.has(cacheKey)
+    ? fewShotPromptCache.get(cacheKey) ?? null
+    : buildFewShotPrompt(selectedExamples);
+
+  if (!fewShotPromptCache.has(cacheKey)) {
+    fewShotPromptCache.set(cacheKey, prompt ?? null);
+  }
+
+  return {
+    prompt,
+    total: dataset.length,
+    filtered: selectedExamples.length,
+    examples: selectedExamples,
+  };
+}
+
+export async function getTotalEstimatedTokensUsed() {
+  return totalEstimatedTokensUsed;
+}
 
 // ============================================================================
 // ENHANCED SCHEMA WITH MORE CONTEXT
@@ -26,10 +646,21 @@ import { validateAndCorrectMelody, analyzeMelody } from '@/lib/melody-validator'
 const InternalPromptInputSchema = z.object({
   prompt: z.string(),
   chordProgression: z.string(),
-  key: z.string(), // Dodane: przekazuj key bezpośrednio
+  sectionProgressions: z.array(z.string()).optional(),
+  key: z.string(),
   exampleMelodyJSON: z.string().optional(),
   feedback: z.string().optional(),
-  attemptNumber: z.number().optional(), // Dodane: informuj AI o próbie
+  attemptNumber: z.number(),
+  measures: z.number().int().positive().max(128).default(8),
+  totalBeats: z.number(),
+  maxStartBeat: z.number(),
+  fewShotExamples: z.string().optional(),
+  mood: z.enum(['dark', 'bright', 'neutral']),
+  intensifyDarkness: z.boolean().optional(),
+  includeMelody: z.boolean().default(true),
+  includeChords: z.boolean().default(true),
+  includeBassline: z.boolean().default(true),
+  instrument: z.enum(['piano', 'guitar', 'strings', 'synth', 'bass']).optional(),
 });
 
 // ============================================================================
@@ -40,19 +671,41 @@ const generateMelodyPrompt = ai.definePrompt({
   name: 'generateFullCompositionPrompt',
   input: {schema: InternalPromptInputSchema},
   output: {schema: GenerateFullCompositionOutputSchema},
-  prompt: `You are an expert music composer and theorist specializing in modern production. Your task is to generate a complete, musically coherent polyphonic composition with three distinct layers: bassline, chords, and melody.
+  prompt: `You are an expert music composer and theorist specializing in modern production.
+
+**LAYERS TO GENERATE:**
+{{#if includeMelody}}
+✓ MELODY (required)
+{{else}}
+✗ MELODY (skip - return empty array)
+{{/if}}
+{{#if includeChords}}
+✓ CHORDS (required)
+{{else}}
+✗ CHORDS (skip - return empty array)
+{{/if}}
+{{#if includeBassline}}
+✓ BASSLINE (required)
+{{else}}
+✗ BASSLINE (skip - return empty array)
+{{/if}}
+
+{{#if instrument}}
+**Primary Instrument Focus:** {{{instrument}}}
+  - Ensure the composition feels playable and idiomatic for {{{instrument}}}
+  - Adjust voicings, articulation, and range accordingly
+{{/if}}
 
 **CRITICAL RULES (DO NOT VIOLATE):**
-1. The composition MUST be EXACTLY 8 bars long (beats 0.0 to 32.0)
-2. All note start times MUST be between 0.0 and 31.9
-3. No note should extend beyond beat 32.0 (start + duration ≤ 32)
-4. No gaps longer than 2 beats in any layer
+1. The composition MUST be EXACTLY {{{measures}}} bars long (beats 0.0 to {{{maxStartBeat}}})
+2. All note start times MUST be between 0.0 and {{{maxStartBeat}}}
+3. No note should extend beyond beat {{{totalBeats}}} (start + duration ≤ {{{totalBeats}}})
+4. No gaps longer than 2 beats in any requested layer
 5. All notes must be in the key of {{{key}}}
 6. Follow the chord progression strictly: {{{chordProgression}}}
 
-**LAYER SPECIFICATIONS:**
-
-**1. BASSLINE (Foundation)**
+{{#if includeBassline}}
+**BASSLINE (Foundation)**
    - Range: C2 to C3 (MIDI 36-48)
    - Rhythm: Use half notes (2 beats) or whole notes (4 beats) primarily
    - Timing: Place notes on strong beats (0, 4, 8, 12, 16, 20, 24, 28)
@@ -72,8 +725,10 @@ const generateMelodyPrompt = ai.definePrompt({
      {note: "F2", start: 24, duration: 4, velocity: 70, slide: false},
      {note: "F2", start: 28, duration: 4, velocity: 70, slide: false}
    ]
+{{/if}}
 
-**2. CHORDS (Harmony)**
+{{#if includeChords}}
+**CHORDS (Harmony)**
    - Range: C3 to C5 (MIDI 48-72)
    - Rhythm: Use whole notes (4 beats) or half notes (2 beats)
    - Timing: Align with bassline changes, start on beats 0, 4, 8, 12, 16, 20, 24, 28
@@ -94,29 +749,44 @@ const generateMelodyPrompt = ai.definePrompt({
      {note: "C4", start: 0, duration: 4, velocity: 80, slide: false},
      {note: "E4", start: 0, duration: 4, velocity: 85, slide: false}
    ]
+{{/if}}
 
-**3. MELODY (Top Line)**
+{{#if includeMelody}}
+**MELODY (Top Line)**
    - Range: C4 to C6 (MIDI 60-84)
    - Rhythm: VARIED - use quarter notes (1 beat), eighth notes (0.5 beats), occasional sixteenth notes (0.25 beats)
    - Timing: Can start on any beat or subdivision
    - Velocity: 90-110 (dynamic, louder than other layers)
    - Notes: Use scale notes, passing tones, chord tones
    - Duration: 0.25 to 2 beats (varied for interest)
-   - Slide: Use for expressive slides (2-4 times per 8 bars)
+   - Slide: Use for expressive slides (a few times per composition)
+{{/if}}
    
-   MELODIC PRINCIPLES:
-   - Start phrases on chord tones
-   - Use stepwise motion (1-2 semitones) 70% of the time
-   - Occasional leaps (3-7 semitones) for interest
-   - Avoid leaps larger than an octave (12 semitones)
-   - Create call-and-response patterns (bar 1-2 = call, bar 3-4 = response)
-   - Rest occasionally (gaps of 0.5-1 beat) for breathing room
-   - Peak around bar 5-6, resolve in bar 7-8
+   **HARMONIC FOUNDATION:**
+Primary Progression: {{{chordProgression}}}
+{{#if sectionProgressions}}
+Sectional Variations:
+{{#each sectionProgressions}}
+- Section {{@index}}: {{{this}}}
+{{/each}}
+{{/if}}
+Each chord should last roughly 1 bar (4 beats) unless progression suggests otherwise. Voice-lead smoothly.
+
+{{#if includeMelody}}
+**MELODIC EXPECTATIONS:**
+- Melodic range: span at least one octave (12 semitones)
+- Use stepwise motion with occasional leaps for contrast
+- Occasional leaps (3-7 semitones) for interest
+- Avoid leaps larger than an octave (12 semitones)
+- Create call-and-response patterns (bar 1-2 = call, bar 3-4 = response)
+- Rest occasionally (gaps of 0.5-1 beat) for breathing room
+- Peak around bar 5-6, resolve in bar 7-8
+{{/if}}
 
 **STYLISTIC INTERPRETATION:**
 User Prompt: "{{{prompt}}}"
 
-Interpret this prompt as follows:
+Interpret this prompt as follows (mood detected: {{{mood}}}):
 - "dark" / "sad" / "melancholic" → Use minor key, lower velocities (60-90), longer note durations, descending melodic lines
 - "trap" / "hip-hop" → Use syncopation, off-beat placements, shorter chords (2 beats), stuttering melody rhythms
 - "aggressive" / "intense" → Higher velocities (90-120), larger intervals, more dissonance, shorter durations
@@ -138,6 +808,18 @@ DO NOT copy the specific notes, intervals, or exact rhythm. Create something new
 Reference: {{{exampleMelodyJSON}}}
 {{/if}}
 
+{{#if fewShotExamples}}
+**REFERENCE EXAMPLES (Few-Shot Guidance):**
+{{{fewShotExamples}}}
+{{/if}}
+
+{{#if intensifyDarkness}}
+**DARKNESS BOOST:**
+- Embrace tension: diminished, altered and chromatic passing tones are encouraged.
+- Allow dissonant extensions (b9, #9, #11, b13) that resolve within 1-2 beats.
+- Use dynamic contrasts and dramatic register shifts.
+{{/if}}
+
 {{#if feedback}}
 **CRITICAL FEEDBACK - Fix These Issues:**
 {{{feedback}}}
@@ -147,6 +829,7 @@ This is attempt #{{{attemptNumber}}}. The previous attempts failed validation. F
 - Ensuring all notes are within the specified ranges
 - Creating proper voice leading between chords
 - Making the melody more singable and memorable
+- Respecting the {{{measures}}} bar limit
 {{/if}}
 {{/if}}
 
@@ -154,15 +837,16 @@ This is attempt #{{{attemptNumber}}}. The previous attempts failed validation. F
 Return a valid JSON object with three keys: "bassline", "chords", and "melody".
 Each contains an array of note objects with:
 - note: string (e.g., "C4") - must be a valid note name
-- start: number (0.0 to 31.9) - when the note begins
+- start: number (0.0 to {{{maxStartBeat}}}) - when the note begins
 - duration: number (0.25 to 4.0) - how long it lasts
 - velocity: number (0 to 127) - how loud it is
 - slide: boolean - true for portamento effect
 
 ENSURE:
-- Every layer has at least 8 notes
+- Every requested layer has at least 8 notes
 - No overlapping notes within the same layer
-- All start times + durations ≤ 32.0
+- All start times + durations ≤ {{{totalBeats}}}
+- Notes from layers that were not requested must return []
 - Notes form a coherent musical composition`,
 });
 
@@ -170,10 +854,93 @@ ENSURE:
 // QUALITY THRESHOLDS AND RETRY LOGIC
 // ============================================================================
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 5;
 const QUALITY_THRESHOLD = 70;
+const RETRY_BASE_DELAY_MS = 1000;
+const MELODY_CACHE_TTL = 1000 * 60 * 30; // 30 minutes
+const MAX_CONCURRENT_MELODY_REQUESTS = 2;
+const USAGE_WINDOW_MS = 1000 * 60 * 60 * 24; // 1 day
+const SOFT_USAGE_LIMIT_PER_WINDOW = 20000; // 20k tokens per day
+const PER_GENERATION_REQUEST_CAP = 5;
 
-// Ulepszona analiza z bardziej szczegółowymi metrykami
+const melodyCache = new Map<string, { data: GenerateFullCompositionOutput; timestamp: number }>();
+const pendingMelodyRequests = new Map<string, Promise<GenerateFullCompositionOutput>>();
+
+let activeMelodyRequests = 0;
+const melodyRequestQueue: Array<() => void> = [];
+
+let usageWindowStart = Date.now();
+let usageTokensInWindow = 0;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function acquireMelodySlot(): Promise<void> {
+  return new Promise(resolve => {
+    if (activeMelodyRequests < MAX_CONCURRENT_MELODY_REQUESTS) {
+      activeMelodyRequests++;
+      resolve();
+      return;
+    }
+    melodyRequestQueue.push(() => {
+      activeMelodyRequests++;
+      resolve();
+    });
+  });
+}
+
+function releaseMelodySlot(): void {
+  activeMelodyRequests = Math.max(0, activeMelodyRequests - 1);
+  const next = melodyRequestQueue.shift();
+  if (next) {
+    next();
+  }
+}
+
+function trackUsage(): boolean {
+  const now = Date.now();
+  if (now - usageWindowStart >= USAGE_WINDOW_MS) {
+    usageWindowStart = now;
+    usageTokensInWindow = 0;
+  }
+
+  if (usageTokensInWindow >= SOFT_USAGE_LIMIT_PER_WINDOW) {
+    console.warn('[MELODY_GEN] Soft token limit reached for today. Rejecting new requests.');
+    return false;
+  }
+
+  const remaining = SOFT_USAGE_LIMIT_PER_WINDOW - usageTokensInWindow;
+  console.log(`[MELODY_GEN] Tokens used today: ${usageTokensInWindow}. Remaining before soft limit: ${remaining}`);
+  return true;
+}
+
+function hashPayload(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function buildCacheKey(input: GenerateMelodyInput & { totalBeats?: number; layers?: Layer[] }): string {
+  const normalizedPrompt = input.prompt.trim();
+  const normalizedChordProgression = input.chordProgression?.trim() ?? null;
+  const normalizedExample = input.exampleMelody
+    ? input.exampleMelody.map(note => ({
+        note: note.note,
+        start: Number(note.start.toFixed(3)),
+        duration: Number(note.duration.toFixed(3)),
+        velocity: note.velocity,
+        slide: !!note.slide,
+      }))
+    : null;
+  const normalizedLayers = input.layers ? [...input.layers].sort() : null;
+
+  return hashPayload({
+    prompt: normalizedPrompt,
+    chordProgression: normalizedChordProgression,
+    example: normalizedExample,
+    measures: input.measures ?? 8,
+    layers: normalizedLayers,
+    gridResolution: input.gridResolution ?? 0.25,
+  });
+}
+
 interface EnhancedMelodyAnalysis {
   score: number;
   issues: string[];
@@ -185,7 +952,7 @@ interface EnhancedMelodyAnalysis {
   coverageRatio: number; // Ile z 32 beatów jest pokrytych
 }
 
-function enhancedAnalyzeMelody(melody: MelodyNote[], key: string): EnhancedMelodyAnalysis {
+function enhancedAnalyzeMelody(melody: MelodyNote[], totalBeats: number, mood: Mood, intensify: boolean): EnhancedMelodyAnalysis {
   if (!melody || melody.length === 0) {
     return {
       score: 0,
@@ -205,7 +972,7 @@ function enhancedAnalyzeMelody(melody: MelodyNote[], key: string): EnhancedMelod
   melody.forEach(note => {
     coveredBeats += note.duration;
   });
-  const coverageRatio = coveredBeats / 32;
+  const coverageRatio = totalBeats > 0 ? coveredBeats / totalBeats : 0;
   
   // Oceń różnorodność rytmiczną
   const durations = melody.map(n => n.duration);
@@ -215,32 +982,40 @@ function enhancedAnalyzeMelody(melody: MelodyNote[], key: string): EnhancedMelod
   // Zbierz problemy
   const issues: string[] = [];
   
+  const allowExtreme = mood === 'dark' || intensify;
+
   if (baseAnalysis.avgInterval < 2 && baseAnalysis.avgInterval > 0) {
     issues.push("Melody is too monotonic - use intervals of 2-5 semitones more often");
   }
-  if (baseAnalysis.avgInterval > 5) {
+  if (baseAnalysis.avgInterval > 5 && !allowExtreme) {
     issues.push("Melody jumps too much - use more stepwise motion (1-2 semitones)");
   }
   if (baseAnalysis.range < 12 && baseAnalysis.range > 0) {
     issues.push("Melodic range is too narrow - expand to at least one octave (12 semitones)");
+  } else if (baseAnalysis.range > 28 && !allowExtreme) {
+    issues.push("Melodic range is too wide - keep within roughly two octaves");
   }
-  if (baseAnalysis.maxInterval > 12) {
-    issues.push("Contains intervals larger than an octave - keep leaps under 12 semitones");
+  if (baseAnalysis.maxInterval > (allowExtreme ? 19 : 12)) {
+    issues.push("Contains intervals larger than allowed - keep dramatic leaps under control");
   }
   if (melody.length < 8) {
     issues.push("Too few notes - add more to create a fuller melody");
   }
   if (coverageRatio < 0.6) {
-    issues.push("Melody has too many gaps - fill in more of the 32 beats");
+    issues.push(`Melody has too many gaps - fill in more of the ${totalBeats} beats`);
   }
-  if (rhythmicVariety < 0.3) {
-    issues.push("Rhythm is too repetitive - vary note durations more");
+  if (rhythmicVariety < (allowExtreme ? 0.2 : 0.3)) {
+    issues.push('Rhythm is too repetitive - vary note durations more');
   }
-  
+
   // Penalizuj za każdy problem
   let score = baseAnalysis.score;
-  score -= issues.length * 5;
-  
+  const penalty = allowExtreme ? 3 : 5;
+  score -= issues.length * penalty;
+  if (allowExtreme) {
+    score += 5; // bonus for mood match
+  }
+
   return {
     score: Math.max(0, Math.min(100, score)),
     issues,
@@ -253,6 +1028,12 @@ function enhancedAnalyzeMelody(melody: MelodyNote[], key: string): EnhancedMelod
   };
 }
 
+function compositionFitsWithinBeats(output: GenerateFullCompositionOutput, totalBeats: number): boolean {
+  const limit = totalBeats + 1e-6;
+  const tracks = [output.melody, output.chords, output.bassline];
+  return tracks.every(track => track.every(note => note.start + note.duration <= limit));
+}
+
 // ============================================================================
 // MAIN FLOW
 // ============================================================================
@@ -263,127 +1044,342 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     inputSchema: GenerateMelodyInputSchema,
     outputSchema: GenerateFullCompositionOutputSchema,
   },
-  async ({ prompt, exampleMelody, chordProgression: providedChordProgression }) => {
-    // Extract key from prompt
-    let chordProgression = providedChordProgression;
-    const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
-    const key = keyMatch ? keyMatch[0] : 'A minor';
+  async ({
+    prompt,
+    exampleMelody,
+    chordProgression: providedChordProgression,
+    measures: requestedMeasures,
+    intensifyDarkness,
+    gridResolution: requestedGridResolution,
+  }) => {
+    const measures = requestedMeasures ?? 8;
+    const totalBeats = measures * 4;
+    const maxStartBeat = Math.max(0, totalBeats - 0.1);
+    const gridResolution = requestedGridResolution ?? 0.25;
 
-    console.log(`[MELODY_GEN] Starting generation for key: ${key}`);
+    // Wykryj które warstwy generować
+    const detectedLayers = detectLayersFromPrompt(prompt);
+    const layers = detectedLayers ?? ['melody', 'chords', 'bassline'];
+    const includeMelody = layers.includes('melody');
+    const includeChords = layers.includes('chords');
+    const includeBassline = layers.includes('bassline');
 
-    // Get chord progression if not provided
-    if (!chordProgression) {
-      console.log('[MELODY_GEN] No chord progression provided, generating...');
-      const chordSuggestions = await suggestChordProgressions({ key });
-      if (chordSuggestions.chordProgressions.length > 0) {
-        chordProgression = chordSuggestions.chordProgressions[0];
-        console.log(`[MELODY_GEN] Using chord progression: ${chordProgression}`);
-      } else {
-        console.warn('[MELODY_GEN] Failed to get AI chord suggestions, using fallback');
-        chordProgression = key.toLowerCase().includes('minor') ? 'Am-G-C-F' : 'C-G-Am-F';
+    console.log('[MELODY_GEN] Generating layers:', {
+      melody: includeMelody,
+      chords: includeChords,
+      bassline: includeBassline,
+    });
+
+    const cacheKey = buildCacheKey({
+      prompt,
+      chordProgression: providedChordProgression,
+      exampleMelody: exampleMelody ?? undefined,
+      measures,
+      layers,
+      gridResolution,
+    });
+
+    const cached = melodyCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now - cached.timestamp < MELODY_CACHE_TTL) {
+      if (compositionFitsWithinBeats(cached.data, totalBeats)) {
+        console.log('[MELODY_GEN] Cache hit. Returning cached composition.');
+        return cached.data;
       }
+      console.log('[MELODY_GEN] Cache hit rejected due to measure mismatch, regenerating.');
+      melodyCache.delete(cacheKey);
     }
-    
-    let bestOutput: GenerateFullCompositionOutput | null = null;
-    let bestScore = 0;
-    let feedback: string | undefined = undefined;
 
-    // Retry loop z ulepszoną logiką
-    for (let i = 0; i < MAX_RETRIES; i++) {
-        console.log(`[MELODY_GEN] Attempt ${i + 1}/${MAX_RETRIES}`);
-        
-        const promptInput: z.infer<typeof InternalPromptInputSchema> = {
+    const pending = pendingMelodyRequests.get(cacheKey);
+    if (pending) {
+      console.log('[MELODY_GEN] Joining in-flight generation for identical request.');
+      return pending;
+    }
+
+    const generationPromise = (async () => {
+      await acquireMelodySlot();
+      try {
+        let chordProgression = providedChordProgression;
+        const keyMatch = prompt.match(/([A-G][b#]?\s+(major|minor))/i);
+        const key = keyMatch ? keyMatch[0] : 'A minor';
+        const mood = getMoodFromPrompt(prompt, intensifyDarkness);
+        const instrument = detectInstrumentFromPrompt(prompt);
+        const useIntensify = Boolean(intensifyDarkness);
+
+        const summaryTokens = [
+          instrument ?? 'general',
+          mood,
+          key.replace(/\s+/g, '-').toLowerCase(),
+          useIntensify ? 'intense' : 'standard',
+        ];
+        console.log('[PROMPT_SUMMARY]', summaryTokens.join(' '));
+
+        console.log(`[MELODY_GEN] Starting generation for key: ${key}`);
+        const estimatedPromptTokens = Math.ceil(JSON.stringify({ prompt, chordProgression: providedChordProgression, exampleMelody, layers }).length / 4);
+        console.log(`[MELODY_GEN] Estimated prompt size: ${estimatedPromptTokens} tokens.`);
+
+        let sectionProgressions: string[] | undefined;
+
+        if (!chordProgression) {
+          console.log('[MELODY_GEN] No chord progression provided, generating...');
+          const chordSuggestions = await suggestChordProgressions({ key, prompt });
+          sectionProgressions = selectChordProgressionForPrompt(prompt, key, mood, chordSuggestions.chordProgressions, instrument);
+          chordProgression = sectionProgressions[0];
+          console.log('[CHORD_SELECTION]', {
+            mood,
+            key,
+            prompt,
+            instrument,
+            suggestionsCount: chordSuggestions.chordProgressions.length,
+            selectedProgression: chordProgression,
+            sectionProgressions,
+            suggestions: chordSuggestions.chordProgressions,
+          });
+        }
+
+        if (!sectionProgressions && chordProgression) {
+          sectionProgressions = [chordProgression];
+        }
+
+        let bestOutput: GenerateFullCompositionOutput | null = null;
+        let bestScore = 0;
+        let feedback: string | undefined = undefined;
+
+        const attemptsAllowed = Math.min(MAX_RETRIES, PER_GENERATION_REQUEST_CAP);
+        for (let i = 0; i < attemptsAllowed; i++) {
+          if (!trackUsage()) {
+            throw new Error('Limit AI osiągnięty w tej godzinie. Spróbuj ponownie za chwilę.');
+          }
+
+          console.log(`[MELODY_GEN] Attempt ${i + 1}/${MAX_RETRIES}`);
+
+          const promptTempo = extractTempoFromPromptText(prompt);
+          const fewShotContext: FewShotContext = {
+            instrument,
+            key,
+            mood,
+            prompt,
+            tempo: promptTempo ?? undefined,
+            keywords: extractKeywordsFromPrompt(prompt),
+          };
+
+          const {
+            prompt: fewShotExamples,
+            total: fewShotTotal,
+            filtered: fewShotFiltered,
+            examples: fewShotExampleList,
+          } = getFewShotPromptForInstrument(fewShotContext);
+
+          if (!chordProgression && fewShotExampleList.length > 0) {
+            const exampleWithProgression = fewShotExampleList.find(example => {
+              const progression = example.input?.chordProgression;
+              return typeof progression === 'string' && progression.trim().length > 0;
+            });
+            const progressionFromExample = exampleWithProgression?.input?.chordProgression?.trim();
+            if (progressionFromExample) {
+              chordProgression = progressionFromExample;
+              sectionProgressions = [progressionFromExample];
+              console.log('[FEWSHOT_CHORDS] Using progression from example', {
+                source: exampleWithProgression?.metadata?.source ?? exampleWithProgression?.input?.prompt ?? 'unknown',
+                chordProgression,
+              });
+            }
+          }
+
+          console.log('[FEWSHOT]', {
+            instrument,
+            hasFewShots: Boolean(fewShotExamples),
+            source: instrument ?? 'default',
+            totalExamples: fewShotTotal,
+            matchedExamples: fewShotFiltered,
+          });
+
+          const promptInput: z.infer<typeof InternalPromptInputSchema> = {
             prompt,
             chordProgression,
+            sectionProgressions,
             key,
             exampleMelodyJSON: exampleMelody ? JSON.stringify(exampleMelody) : undefined,
             feedback,
             attemptNumber: i + 1,
-        };
+            measures,
+            totalBeats,
+            maxStartBeat,
+            fewShotExamples: fewShotExamples ?? undefined,
+            mood,
+            intensifyDarkness: useIntensify || undefined,
+            includeMelody,
+            includeChords,
+            includeBassline,
+            instrument,
+          };
 
-        try {
-          const { output } = await generateMelodyPrompt(promptInput);
-          
-          if (!output || !output.melody || output.melody.length === 0) {
+          try {
+            const { output } = await generateMelodyPrompt(promptInput);
+
+            if (!output) {
               console.warn(`[MELODY_GEN] Attempt ${i + 1}: AI returned empty output`);
+              if (i < MAX_RETRIES - 1) {
+                const delay = RETRY_BASE_DELAY_MS * 2 ** i + Math.floor(Math.random() * 250);
+                console.log(`[MELODY_GEN] Waiting ${delay}ms before retry...`);
+                await sleep(delay);
+              }
               continue;
-          }
-          
-          // Ulepszona analiza
-          const melodyAnalysis = enhancedAnalyzeMelody(output.melody, key);
-          
-          console.log(`[MELODY_GEN] Attempt ${i + 1} score: ${melodyAnalysis.score}`, {
-            noteCount: melodyAnalysis.noteCount,
-            avgInterval: melodyAnalysis.avgInterval.toFixed(2),
-            range: melodyAnalysis.range,
-            rhythmicVariety: (melodyAnalysis.rhythmicVariety * 100).toFixed(0) + '%',
-            coverage: (melodyAnalysis.coverageRatio * 100).toFixed(0) + '%',
-          });
-          
-          // Zachowaj najlepszy wynik
-          if (melodyAnalysis.score > bestScore) {
-            bestScore = melodyAnalysis.score;
-            bestOutput = output;
-          }
-          
-          // Jeśli spełnia próg, zakończ
-          if (melodyAnalysis.score >= QUALITY_THRESHOLD) {
+            }
+
+            const outputMelody = Array.isArray(output.melody) ? output.melody : [];
+            const outputChords = Array.isArray(output.chords) ? output.chords : [];
+            const outputBassline = Array.isArray(output.bassline) ? output.bassline : [];
+
+            const missingLayers: string[] = [];
+            if (includeMelody && outputMelody.length === 0) missingLayers.push('melody');
+            if (includeChords && outputChords.length === 0) missingLayers.push('chords');
+            if (includeBassline && outputBassline.length === 0) missingLayers.push('bassline');
+
+            if (missingLayers.length > 0) {
+              console.warn(`[MELODY_GEN] Attempt ${i + 1}: AI returned empty layers: ${missingLayers.join(', ')}`);
+              if (i < MAX_RETRIES - 1) {
+                const delay = RETRY_BASE_DELAY_MS * 2 ** i + Math.floor(Math.random() * 250);
+                console.log(`[MELODY_GEN] Waiting ${delay}ms before retry...`);
+                await sleep(delay);
+              }
+              continue;
+            }
+
+            const estimatedResponseTokens = Math.ceil(JSON.stringify(output).length / 4);
+            const shouldScore = includeMelody;
+            const melodyAnalysis = shouldScore && outputMelody.length > 0
+              ? enhancedAnalyzeMelody(outputMelody, totalBeats, mood, useIntensify)
+              : {
+                  score: 100,
+                  issues: [],
+                  avgInterval: 0,
+                  range: 0,
+                  maxInterval: 0,
+                  noteCount: outputMelody.length,
+                  rhythmicVariety: 0,
+                  coverageRatio: 0,
+                };
+
+            const estimatedTotalTokens = estimatedPromptTokens + estimatedResponseTokens;
+
+            console.log(`[MELODY_GEN] Attempt ${i + 1} score: ${melodyAnalysis.score}`, {
+              noteCount: melodyAnalysis.noteCount,
+              avgInterval: melodyAnalysis.avgInterval.toFixed(2),
+              range: melodyAnalysis.range,
+              rhythmicVariety: (melodyAnalysis.rhythmicVariety * 100).toFixed(0) + '%',
+              coverage: (melodyAnalysis.coverageRatio * 100).toFixed(0) + '%',
+              promptTokens: estimatedPromptTokens,
+              responseTokens: estimatedResponseTokens,
+              estimatedTotalTokens: estimatedTotalTokens,
+            });
+
+            totalEstimatedTokensUsed += estimatedTotalTokens;
+            console.log('Updated totalEstimatedTokensUsed to', totalEstimatedTokensUsed);
+
+            if (melodyAnalysis.score > bestScore) {
+              bestScore = melodyAnalysis.score;
+              bestOutput = output;
+            }
+
+            if (melodyAnalysis.score >= QUALITY_THRESHOLD || !shouldScore) {
               console.log(`[MELODY_GEN] ✓ Quality threshold met on attempt ${i + 1}`);
               break;
-          }
+            }
 
-          // Przygotuj bardziej szczegółowy feedback
-          feedback = melodyAnalysis.issues.length > 0 
-            ? melodyAnalysis.issues.join('. ') + '.'
-            : 'The melody needs more musical interest and variety.';
-          
-          if (i === MAX_RETRIES - 1) {
+            let baseFeedback = melodyAnalysis.issues.length > 0
+              ? melodyAnalysis.issues.join('. ') + '.'
+              : 'The melody needs more musical interest and variety.';
+            if (mood === 'dark' || useIntensify) {
+              baseFeedback += ' Lean into tension with chromatic passing tones, minor second clashes, and unresolved suspensions.';
+            }
+            feedback = baseFeedback;
+
+            if (i === MAX_RETRIES - 1) {
               console.warn(`[MELODY_GEN] Max retries reached. Best score: ${bestScore}`);
-          }
-          
-        } catch (error) {
-          console.error(`[MELODY_GEN] Error on attempt ${i + 1}:`, error);
-          if (i === MAX_RETRIES - 1) throw error;
-        }
-    }
+            } else {
+              const delay = RETRY_BASE_DELAY_MS * 2 ** i + Math.floor(Math.random() * 250);
+              console.log(`[MELODY_GEN] Waiting ${delay}ms before retry...`);
+              await sleep(delay);
+            }
+          } catch (error) {
+            console.error(`[MELODY_GEN] Error on attempt ${i + 1}:`, error);
+            if (i === MAX_RETRIES - 1) throw error;
 
-    if (!bestOutput) {
-        throw new Error("AI failed to generate any valid composition after multiple retries.");
+            const delay = RETRY_BASE_DELAY_MS * 2 ** i + Math.floor(Math.random() * 250);
+            console.log(`[MELODY_GEN] Waiting ${delay}ms before retry due to error...`);
+            await sleep(delay);
+          }
+        }
+
+        if (!bestOutput) {
+          throw new Error('AI failed to generate any valid composition after multiple retries.');
+        }
+
+        console.log('[MELODY_GEN] Validating and correcting output...');
+
+        const allowChromatic = mood === 'dark' || useIntensify;
+
+        const normalizedBestOutput = {
+          melody: Array.isArray(bestOutput.melody) ? bestOutput.melody : [],
+          chords: Array.isArray(bestOutput.chords) ? bestOutput.chords : [],
+          bassline: Array.isArray(bestOutput.bassline) ? bestOutput.bassline : [],
+        };
+
+        let validatedOutput: GenerateFullCompositionOutput = {
+          melody: safeValidateLayer(includeMelody, normalizedBestOutput.melody, key, {
+            maxDuration: totalBeats,
+            quantizeGrid: gridResolution,
+            correctToScale: !allowChromatic,
+            maxInterval: allowChromatic ? 18 : 12,
+            ensureMinNotes: 12,
+            allowChromatic,
+          }),
+          chords: safeValidateLayer(includeChords, normalizedBestOutput.chords, key, {
+            maxDuration: totalBeats,
+            quantizeGrid: gridResolution * 2,
+            correctToScale: !(mood === 'dark' || useIntensify),
+            allowChromatic,
+            ensureMinNotes: 8,
+          }),
+          bassline: safeValidateLayer(includeBassline, normalizedBestOutput.bassline, key, {
+            maxDuration: totalBeats,
+            quantizeGrid: allowChromatic ? 0.25 : gridResolution * 4,
+            correctToScale: !(mood === 'dark' || useIntensify),
+            allowChromatic,
+            maxInterval: allowChromatic ? 19 : 12,
+            ensureMinNotes: 6,
+          }),
+        };
+
+        if (instrument === 'guitar' && !shouldSkipStrum(prompt) && validatedOutput.chords.length > 0) {
+          const strumStep = Math.max(gridResolution / 6, 0.02);
+          const strummedChords = applyGuitarStrum(validatedOutput.chords, 'up', strumStep);
+          validatedOutput = {
+            ...validatedOutput,
+            chords: strummedChords,
+          };
+        }
+
+        console.log('[MELODY_GEN] ✓ Generation complete');
+        return validatedOutput;
+      } finally {
+        releaseMelodySlot();
+      }
+    })();
+
+    pendingMelodyRequests.set(cacheKey, generationPromise);
+
+    try {
+      const result = await generationPromise;
+      melodyCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
+    } finally {
+      pendingMelodyRequests.delete(cacheKey);
     }
-    
-    console.log('[MELODY_GEN] Validating and correcting output...');
-    
-    // Final validation z ulepszonymi opcjami
-    const validatedOutput: GenerateFullCompositionOutput = {
-      melody: validateAndCorrectMelody(bestOutput.melody, key, { 
-        maxDuration: 32, 
-        quantizeGrid: 1/32, 
-        correctToScale: true, 
-        maxInterval: 12,
-        ensureMinNotes: 12, // Dodaj minimum 12 nut w melodii
-      }),
-      chords: validateAndCorrectMelody(bestOutput.chords, key, { 
-        maxDuration: 32, 
-        quantizeGrid: 1/16, 
-        correctToScale: true,
-        ensureMinNotes: 8, // Minimum 8 akordów
-      }),
-      bassline: validateAndCorrectMelody(bestOutput.bassline, key, { 
-        maxDuration: 32, 
-        quantizeGrid: 1/8, 
-        correctToScale: true,
-        ensureMinNotes: 8, // Minimum 8 nut w basie
-      }),
-    };
-    
-    console.log('[MELODY_GEN] ✓ Generation complete');
-    
-    return validatedOutput;
   }
 );
 
 export async function generateMelodyFromPrompt(input: GenerateMelodyInput): Promise<GenerateFullCompositionOutput> {
   return generateMelodyFromPromptFlow(input);
 }
-
-    

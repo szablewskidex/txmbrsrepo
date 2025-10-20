@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Play, Pause, Download, Ghost, FileJson, Upload } from 'lucide-react';
+import { Play, Pause, Download, Ghost, FileJson, Upload, Move } from 'lucide-react';
 import React from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -11,6 +11,8 @@ interface ToolbarProps {
   isPlaying: boolean;
   onPlayToggle: () => void;
   onExportMidi: () => void;
+  onDragMidiStart?: (event: React.DragEvent<HTMLButtonElement>) => void;
+  onDragMidiEnd?: () => void;
   onExportJson: () => void;
   onImportMidiClick: () => void;
   onToggleGhost: () => void;
@@ -19,7 +21,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ 
-  isPlaying, onPlayToggle, onExportMidi, onExportJson, onImportMidiClick, onToggleGhost,
+  isPlaying, onPlayToggle, onExportMidi, onDragMidiStart, onDragMidiEnd, onExportJson, onImportMidiClick, onToggleGhost,
   bpm, onBpmChange
 }: ToolbarProps) {
   return (
@@ -47,6 +49,17 @@ export function Toolbar({
         <Button variant="ghost" size="icon" onClick={onImportMidiClick} title="Importuj MIDI">
             <Upload className="h-5 w-5" />
             <span className="sr-only">Importuj MIDI</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Przeciągnij MIDI"
+          draggable
+          onDragStart={onDragMidiStart}
+          onDragEnd={onDragMidiEnd}
+        >
+          <Move className="h-5 w-5" />
+          <span className="sr-only">Przeciągnij MIDI</span>
         </Button>
         <Button variant="ghost" size="icon" onClick={onExportMidi} title="Eksportuj MIDI">
           <Download className="h-5 w-5" />

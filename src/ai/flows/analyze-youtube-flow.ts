@@ -82,7 +82,7 @@ const youtubeAnalysisFlow = ai.defineFlow(
     inputSchema: AnalyzeYouTubeInputSchema,
     outputSchema: GenerateFullCompositionOutputSchema,
   },
-  async ({ youtubeUrl, targetPrompt }) => {
+  async ({ youtubeUrl, targetPrompt, measures }) => {
     // 1. "Analyze" the youtube video to get a melody
     const analysis = await analyzeYouTubeAudio({ youtubeUrl });
     
@@ -101,6 +101,7 @@ const youtubeAnalysisFlow = ai.defineFlow(
     const generatedComposition = await generateMelodyFromPrompt({
       prompt: finalPrompt,
       exampleMelody: exampleMelodyForPrompt,
+      measures,
     });
     
     return generatedComposition;

@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+config({ path: '.env.local' });
 config();
 
 import '@/ai/flows/suggest-chord-progressions.ts';
