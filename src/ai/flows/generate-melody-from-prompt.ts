@@ -1344,7 +1344,7 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
           }),
           bassline: safeValidateLayer(includeBassline, normalizedBestOutput.bassline, key, {
             maxDuration: totalBeats,
-            quantizeGrid: allowChromatic ? 0.25 : gridResolution * 4,
+            quantizeGrid: gridResolution * 4,
             correctToScale: !(mood === 'dark' || useIntensify),
             allowChromatic,
             maxInterval: allowChromatic ? 19 : 12,

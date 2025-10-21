@@ -52,8 +52,10 @@ export function Grid({
     startY: 0,
     moved: false,
     preventClick: false,
+    touchMode: false,
   });
   const [selectionBox, setSelectionBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const lastTapRef = useRef<number>(0);
 
   const gridWidth = beats * cellPx;
   const gridHeight = PIANO_KEYS.length * ROW_HEIGHT * verticalZoom;
@@ -93,13 +95,13 @@ export function Grid({
     }
   }, [cellPx, verticalZoom, onUpdateNote]);
 
-  const handleSelectionMouseMove = useCallback((event: MouseEvent) => {
+  const handleSelectionMove = useCallback((clientX: number, clientY: number) => {
     const state = selectionStateRef.current;
     const grid = gridRef.current;
     if (!state.isSelecting || !grid) return;
 
-    const currentX = event.clientX;
-    const currentY = event.clientY;
+    const currentX = clientX;
+    const currentY = clientY;
     const dx = currentX - state.startX;
     const dy = currentY - state.startY;
 
@@ -152,20 +154,28 @@ export function Grid({
     onSelectionChange(selectedIds, selectedIds[selectedIds.length - 1] ?? null);
   }, [cellPx, gridHeight, gridWidth, notes, onSelectionChange, verticalZoom]);
 
+  const handleSelectionMouseMove = useCallback((event: MouseEvent) => {
+    handleSelectionMove(event.clientX, event.clientY);
+  }, [handleSelectionMove]);
+
   const handleSelectionMouseUp = useCallback(() => {
     const state = selectionStateRef.current;
     if (!state.isSelecting) return;
 
     window.removeEventListener('mousemove', handleSelectionMouseMove);
     window.removeEventListener('mouseup', handleSelectionMouseUp);
+    window.removeEventListener('touchmove', handleTouchMove);
+    window.removeEventListener('touchend', handleTouchEnd);
 
     const wasDrag = state.moved;
+    const wasTouch = state.touchMode;
     state.isSelecting = false;
     state.moved = false;
     state.preventClick = wasDrag;
+    state.touchMode = false;
     setSelectionBox(null);
 
-    if (!wasDrag) {
+    if (!wasDrag && !wasTouch) {
       onSelectionChange([]);
     }
 
@@ -173,6 +183,17 @@ export function Grid({
       state.preventClick = false;
     }, 0);
   }, [handleSelectionMouseMove, onSelectionChange]);
+
+  const handleTouchMove = useCallback((event: TouchEvent) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    event.preventDefault();
+    handleSelectionMove(touch.clientX, touch.clientY);
+  }, [handleSelectionMove]);
+
+  const handleTouchEnd = useCallback(() => {
+    handleSelectionMouseUp();
+  }, [handleSelectionMouseUp]);
 
   const handleNoteMouseDown = useCallback((e: React.MouseEvent, noteId: number, type: 'move' | 'resize') => {
     if (e.button !== 0) {
@@ -194,6 +215,9 @@ export function Grid({
       selectionStateRef.current.preventClick = false;
       return;
     }
+    if (e.detail > 1) {
+      return;
+    }
     if (e.target !== gridRef.current || !gridRef.current) return;
 
     const rect = gridRef.current.getBoundingClientRect();
@@ -208,6 +232,24 @@ export function Grid({
     }
   }, [cellPx, onAddNote, verticalZoom]);
 
+  const activateMouseSelection = useCallback((clientX: number, clientY: number) => {
+    const state = selectionStateRef.current;
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    state.isSelecting = true;
+    state.startX = clientX;
+    state.startY = clientY;
+    state.moved = false;
+    state.preventClick = true;
+    state.touchMode = false;
+    setSelectionBox(null);
+    onSelectionChange([]);
+
+    window.addEventListener('mousemove', handleSelectionMouseMove);
+    window.addEventListener('mouseup', handleSelectionMouseUp);
+  }, [handleSelectionMouseMove, handleSelectionMouseUp, onSelectionChange]);
+
   const handleGridMouseDown = useCallback((e: React.MouseEvent) => {
     if (!gridRef.current) return;
 
@@ -218,23 +260,64 @@ export function Grid({
     }
 
     if (e.button === 0 && e.target === gridRef.current) {
-      const state = selectionStateRef.current;
-      state.isSelecting = true;
-      state.startX = e.clientX;
-      state.startY = e.clientY;
-      state.moved = false;
-      state.preventClick = false;
-      setSelectionBox(null);
-      onSelectionChange([]);
-      window.addEventListener('mousemove', handleSelectionMouseMove);
-      window.addEventListener('mouseup', handleSelectionMouseUp);
+      activateMouseSelection(e.clientX, e.clientY);
     }
-  }, [handleSelectionMouseMove, handleSelectionMouseUp, onSelectionChange]);
+  }, [activateMouseSelection, onSelectionChange]);
+
+  const activateTouchSelection = useCallback((clientX: number, clientY: number) => {
+    const state = selectionStateRef.current;
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    state.isSelecting = true;
+    state.startX = clientX;
+    state.startY = clientY;
+    state.moved = false;
+    state.preventClick = false;
+    state.touchMode = true;
+    setSelectionBox(null);
+    onSelectionChange([]);
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+  }, [handleTouchEnd, handleTouchMove, onSelectionChange]);
+
+  const handleGridTouchStart = useCallback((event: React.TouchEvent) => {
+    if (!gridRef.current) return;
+
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapRef.current;
+    lastTapRef.current = now;
+
+    if (event.touches.length === 1 && timeSinceLastTap < 400) {
+      const touch = event.touches[0];
+      activateTouchSelection(touch.clientX, touch.clientY);
+      event.preventDefault();
+      event.stopPropagation();
+      if (window.getSelection) {
+        try {
+          window.getSelection()?.removeAllRanges();
+        } catch (err) {
+          // ignore selection clearing errors
+        }
+      }
+    }
+  }, [activateTouchSelection]);
+
+  const handleGridDoubleClick = useCallback((event: React.MouseEvent) => {
+    if (!gridRef.current) return;
+    if (event.button !== 0) return;
+
+    activateMouseSelection(event.clientX, event.clientY);
+    event.preventDefault();
+    event.stopPropagation();
+  }, [activateMouseSelection]);
+
 
   return (
     <div
       ref={gridRef}
-      className="absolute left-0 top-0 bg-background"
+      className="absolute left-0 top-0 bg-background select-none"
       style={{
         width: gridWidth,
         height: gridHeight,
@@ -254,7 +337,9 @@ export function Grid({
       }}
       onClick={handleGridClick}
       onMouseDown={handleGridMouseDown}
+      onDoubleClick={handleGridDoubleClick}
       onContextMenu={e => e.preventDefault()}
+      onTouchStart={handleGridTouchStart}
     >
       {selectionBox && (
         <div

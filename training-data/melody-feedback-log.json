@@ -1,5 +1,42 @@
 [
   {
+    "prompt": "mroczne, mroczne wszystko, 145 bpm, arp melody",
+    "key": "D minor",
+    "measures": 8,
+    "tempo": 144,
+    "gridResolution": 0.0625,
+    "chordProgression": "Dm-Gm-Am-Dm",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "notes": "zbyt jasna tonacja, nie brzmi dark",
+    "signature": "f33172cc1aa4ba65af9de3e9dd43c8a41433b7fb",
+    "timestamp": "2025-10-21T10:49:11.921Z"
+  },
+  {
+    "prompt": "dark",
+    "key": "G minor",
+    "measures": 8,
+    "tempo": 144,
+    "gridResolution": 0.08333333333333333,
+    "chordProgression": "Gm-Cm",
+    "intensifyDarkness": true,
+    "reason": "quality",
+    "signature": "a05dd2f9b4f92c4d350346d6e607333ebbfaaaff",
+    "timestamp": "2025-10-21T04:07:59.390Z"
+  },
+  {
+    "prompt": "dark trap melody",
+    "key": "unknown",
+    "measures": 8,
+    "tempo": 120,
+    "gridResolution": 0.16666666666666666,
+    "intensifyDarkness": true,
+    "reason": "quality",
+    "notes": "nudna i jasna",
+    "signature": "e5efa28fe3c112547d22453a0ed926b5300c7ff5",
+    "timestamp": "2025-10-21T03:43:03.466Z"
+  },
+  {
     "prompt": "do it",
     "key": "A minor",
     "measures": 8,
