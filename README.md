@@ -1,5 +1,8 @@
-# Firebase Studio
+# PianoRollAI
 
-This is a NextJS starter in Firebase Studio.
+PianoRollAI is a web-based environment for quickly shaping musical ideas with help from AI. It gives you a focused workspace, easy MIDI handling, and a few smart helpers so your concepts move from sketch to shareable draft without friction.
 
-To get started, take a look at src/app/page.tsx.
+TODO:
+
+1.From screenshot to Midi and PDF Files genAI
+2.Create pdf file
