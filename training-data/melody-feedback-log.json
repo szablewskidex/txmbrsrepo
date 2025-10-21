@@ -1,5 +1,98 @@
 [
   {
+    "prompt": "do it",
+    "key": "A minor",
+    "measures": 8,
+    "tempo": 160,
+    "gridResolution": 0.125,
+    "chordProgression": "Am-G-C-F",
+    "intensifyDarkness": true,
+    "reason": "quality",
+    "signature": "9f4858273e574237a63d012049e6e724c72488e3",
+    "timestamp": "2025-10-21T03:22:50.990Z"
+  },
+  {
+    "prompt": "melody",
+    "key": "unknown",
+    "measures": 20,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "intensifyDarkness": false,
+    "reason": "prompt_mismatch",
+    "notes": "zbyt jasna tonacja",
+    "signature": "48ab661082af649edc817aa6842536a029da4ac1",
+    "timestamp": "2025-10-21T02:53:50.698Z"
+  },
+  {
+    "prompt": "melody",
+    "key": "unknown",
+    "measures": 20,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "intensifyDarkness": false,
+    "reason": "prompt_mismatch",
+    "signature": "8db9e003ba8f371a72119790d97623e357bd8ce6",
+    "timestamp": "2025-10-21T02:36:20.161Z"
+  },
+  {
+    "prompt": "melody",
+    "key": "unknown",
+    "measures": 20,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "intensifyDarkness": false,
+    "reason": "other",
+    "signature": "8db9e003ba8f371a72119790d97623e357bd8ce6",
+    "timestamp": "2025-10-21T02:32:37.542Z"
+  },
+  {
+    "prompt": "dark trap melody",
+    "key": "G minor",
+    "measures": 32,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "intensifyDarkness": true,
+    "reason": "quality",
+    "signature": "5432757c2c875355e58158dcfab5b64569ab30c7",
+    "timestamp": "2025-10-20T23:43:50.897Z"
+  },
+  {
+    "prompt": "g min",
+    "key": "G minor",
+    "measures": 8,
+    "tempo": 150,
+    "gridResolution": 0.08333333333333333,
+    "chordProgression": "",
+    "intensifyDarkness": true,
+    "reason": "quality",
+    "signature": "a4427c9c6d8e1657670662f326a9f0e0f5aaeed9",
+    "timestamp": "2025-10-20T23:41:09.304Z"
+  },
+  {
+    "prompt": "minor, just chords and melody, no bassline, chords: 4 octaves F minor to 4 octaves E minor",
+    "key": "F minor",
+    "measures": 8,
+    "tempo": 150,
+    "gridResolution": 0.25,
+    "chordProgression": "",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "a96a2740092200f5d863f9dfd0768b290a276597",
+    "timestamp": "2025-10-20T22:12:17.930Z"
+  },
+  {
+    "prompt": "dark trap melody",
+    "key": "A minor",
+    "measures": 8,
+    "tempo": 120,
+    "gridResolution": 0.25,
+    "chordProgression": "",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "d46f3db27d4849077ad678dffae2610b0157a72d",
+    "timestamp": "2025-10-20T15:19:35.700Z"
+  },
+  {
     "prompt": "almost no changes, just same pattern",
     "key": "D# minor",
     "measures": 16,

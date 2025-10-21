@@ -17,19 +17,22 @@ interface NoteItemProps {
 export function NoteItem({ note, cellPx, verticalZoom, isSelected, onMouseDown }: NoteItemProps) {
   const noteHeight = ROW_HEIGHT * verticalZoom;
   const noteWidth = note.duration * cellPx;
+  const boxShadow = isSelected
+    ? '0 0 0 2px rgba(56,189,248,0.55), 0 0 22px rgba(56,189,248,0.45)'
+    : '0 2px 4px rgba(0,0,0,0.4)';
 
   return (
     <div
       className={cn(
-        "absolute flex items-center bg-primary rounded-sm transition-all duration-100 ease-out cursor-grab active:cursor-grabbing",
-        isSelected && "ring-2 ring-offset-2 ring-offset-background ring-accent"
+        "absolute flex items-center rounded-sm transition-all duration-100 ease-out cursor-grab active:cursor-grabbing bg-primary",
+        isSelected && "bg-sky-400/90 text-sky-950"
       )}
       style={{
         left: note.start * cellPx,
         top: (PIANO_KEYS.length - 1 - note.pitch) * ROW_HEIGHT * verticalZoom,
         width: noteWidth,
         height: noteHeight,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+        boxShadow,
       }}
       onMouseDown={(e) => onMouseDown(e, note.id, 'move')}
       onClick={(e) => e.stopPropagation()}

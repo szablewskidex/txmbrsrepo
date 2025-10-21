@@ -23,7 +23,8 @@ export const ALL_KEYS = [
     'G# major', 'G# minor',
 ];
 
-export const DEFAULT_MEASURES = 8;
+export const MAX_COMPOSITION_MEASURES = 8;
+export const DEFAULT_MEASURES = MAX_COMPOSITION_MEASURES;
 export const DEFAULT_CELL_PX = 40;
 export const ROW_HEIGHT = 22;
 

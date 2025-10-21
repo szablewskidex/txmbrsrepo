@@ -9,11 +9,35 @@ import {
 } from '@/app/ai-actions';
 import { useGenerationProgress } from '@/hooks/useGenerationProgress';
 
+const detectMobileDevice = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const userAgent = window.navigator.userAgent || '';
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const matchesMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|iemobile/i.test(userAgent);
+  const isNarrow = window.matchMedia('(max-width: 768px)').matches;
+  return matchesMobileUA || (isTouchDevice && isNarrow);
+};
+
+const detectStandalone = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    ((window.navigator as typeof window.navigator & { standalone?: boolean }).standalone === true)
+  );
+};
+
 export default function Home() {
   const [melody, setMelody] = useState<GenerateFullCompositionOutput | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [overlayStep, setOverlayStep] = useState<string | undefined>(undefined);
   const [suppressProgress, setSuppressProgress] = useState(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(detectStandalone);
+  const [isMobileDevice, setIsMobileDevice] = useState<boolean>(detectMobileDevice);
+  const [isClientReady, setIsClientReady] = useState<boolean>(false);
   const { progress, status, start, stop, reset } = useGenerationProgress();
   const cancelGenerationRef = useRef(false);
   const overlayClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,6 +53,76 @@ export default function Home() {
         clearTimeout(restoreOverlayTimeoutRef.current);
         restoreOverlayTimeoutRef.current = null;
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const mobileWidthQuery = window.matchMedia('(max-width: 768px)');
+
+    const detectMobile = () => {
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const matchesMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|iemobile/i.test(window.navigator.userAgent || '');
+      setIsMobileDevice(matchesMobileUA || (isTouchDevice && mobileWidthQuery.matches));
+    };
+
+    const checkStandalone = () => {
+      const standaloneFromMedia = mediaQuery.matches;
+      const standaloneFromNavigator = (window.navigator as typeof window.navigator & { standalone?: boolean }).standalone === true;
+      setIsStandalone(standaloneFromMedia || standaloneFromNavigator);
+    };
+
+    const preventGesture = (event: TouchEvent) => {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    };
+
+    let lastTouchEnd = 0;
+    const preventDoubleTap = (event: TouchEvent) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    const setViewportHeight = () => {
+      document.documentElement.style.setProperty('--app-vh', `${window.innerHeight * 0.01}px`);
+    };
+
+    detectMobile();
+    checkStandalone();
+    setViewportHeight();
+    mediaQuery.addEventListener('change', checkStandalone);
+    mobileWidthQuery.addEventListener('change', detectMobile);
+    window.addEventListener('appinstalled', checkStandalone);
+    window.addEventListener('resize', setViewportHeight);
+    const orientationHandler = () => {
+      setTimeout(setViewportHeight, 220);
+    };
+    window.addEventListener('orientationchange', orientationHandler);
+
+    document.addEventListener('touchmove', preventGesture, { passive: false });
+    const gestureHandler = (event: Event) => event.preventDefault();
+    document.addEventListener('gesturestart', gestureHandler);
+    document.addEventListener('touchend', preventDoubleTap, { passive: false });
+
+    setIsClientReady(true);
+
+    return () => {
+      mediaQuery.removeEventListener('change', checkStandalone);
+      mobileWidthQuery.removeEventListener('change', detectMobile);
+      window.removeEventListener('appinstalled', checkStandalone);
+      window.removeEventListener('resize', setViewportHeight);
+      window.removeEventListener('orientationchange', orientationHandler);
+      document.removeEventListener('touchmove', preventGesture);
+      document.removeEventListener('gesturestart', gestureHandler);
+      document.removeEventListener('touchend', preventDoubleTap);
     };
   }, []);
 
@@ -192,8 +286,35 @@ export default function Home() {
   const progressValue = !isGenerating || suppressProgress ? undefined : progress;
   const stepValue = isGenerating ? (overlayStep ?? status ?? 'Łączenie z modelem...') : undefined;
 
+  if (!isClientReady) {
+    return <main className="min-h-screen w-screen bg-black" />;
+  }
+
+  if (isMobileDevice && !isStandalone) {
+    return (
+      <main className="min-h-screen w-screen bg-gradient-to-br from-black via-zinc-900 to-purple-950 text-foreground flex flex-col items-center justify-center gap-6 px-6 text-center">
+        <div className="max-w-md space-y-4">
+          <h1 className="text-3xl font-bold tracking-tight">Dodaj PianoRollAI do ekranu głównego</h1>
+          <p className="text-sm text-muted-foreground">
+            Aby korzystać z aplikacji w trybie pełnoekranowym, dodaj ją do ekranu głównego swojego urządzenia i uruchom z ikony skrótu.
+          </p>
+          <div className="bg-card/60 border border-white/10 rounded-xl p-4 text-left space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">Android (Chrome)</h2>
+              <p className="text-xs text-white/60">Menu ⋮ → „Dodaj do ekranu głównego”, następnie otwórz aplikację z nowej ikony.</p>
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">iOS (Safari)</h2>
+              <p className="text-xs text-white/60">Udostępnij → „Dodaj do ekranu domowego”, a potem uruchom z ekranu głównego.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="h-screen w-screen overflow-hidden">
+    <main className="w-screen overflow-hidden" style={{ minHeight: 'calc(var(--app-vh, 1vh) * 100)' }}>
       <PianoRoll
         melody={melody}
         setMelody={setMelody}

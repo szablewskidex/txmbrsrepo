@@ -1,24 +1,25 @@
-"use client";
+  "use client";
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, useTransition } from 'react';
+import MidiWriter from 'midi-writer-js';
 import { Midi } from '@tonejs/midi';
 import * as Tone from 'tone';
 import type { Note, GhostNote } from '@/lib/types';
-import { DEFAULT_MEASURES, DEFAULT_CELL_PX, ROW_HEIGHT, DEFAULT_GRID_RESOLUTION } from '@/lib/constants';
+import { DEFAULT_MEASURES, DEFAULT_CELL_PX, ROW_HEIGHT, DEFAULT_GRID_RESOLUTION, PIANO_KEYS, MAX_COMPOSITION_MEASURES } from '@/lib/constants';
 import { indexToNote, indexToMidiNote, noteToIndex, midiToNoteName } from '@/lib/music';
 import { useToast } from '@/hooks/use-toast';
 import { getMidiExamplesAction, loadMidiFileAction } from '../../app/midi-actions';
 import { suggestChordProgressionsAction } from '../../app/ai-actions';
 import type { GenerateFullCompositionOutput, MelodyNote } from '@/lib/schemas';
-import { Disc3, Loader2, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Disc3, Loader2, ThumbsDown, ThumbsUp, Settings2, X } from 'lucide-react';
 
 import { Toolbar } from './Toolbar';
 import { PianoKeys } from './PianoKeys';
 import { Grid } from './Grid';
 import { ControlsPanel } from './ControlsPanel';
 import { EventEditor } from './EventEditor';
-import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 import { Timeline } from './Timeline';
+import { ScrollArea } from '../ui/scroll-area';
 import { Progress } from '../ui/progress';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -75,20 +76,21 @@ export function PianoRoll({
   const [measures, setMeasures] = useState(DEFAULT_MEASURES);
   const [cellPx, setCellPx] = useState(DEFAULT_CELL_PX);
   const [verticalZoom, setVerticalZoom] = useState(1);
-  const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<number[]>([]);
+  const [activeNoteId, setActiveNoteId] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playPosition, setPlayPosition] = useState(0);
   const [chordProgressions, setChordProgressions] = useState<string[]>([]);
   const [isFetchingChords, setIsFetchingChords] = useState(false);
   const [selectedChordProgression, setSelectedChordProgression] = useState<string | undefined>(undefined);
-  const [currentKey, setCurrentKey] = useState('A minor');
+  const [currentKey, setCurrentKey] = useState('');
   const [debouncedKey, setDebouncedKey] = useState(currentKey);
   const [bpm, setBpm] = useState(120);
   const [midiExamples, setMidiExamples] = useState<string[]>([]);
   const [selectedMidiExample, setSelectedMidiExample] = useState<string>('');
   const [lastPrompt, setLastPrompt] = useState<string>('melody');
   const [gridResolution, setGridResolution] = useState(DEFAULT_GRID_RESOLUTION);
-  const [lastKey, setLastKey] = useState('A minor');
+  const [lastKey, setLastKey] = useState('');
   const [lastChordProgression, setLastChordProgression] = useState<string | undefined>(undefined);
   const [lastIntensifyDarkness, setLastIntensifyDarkness] = useState(false);
   const [feedbackState, setFeedbackState] = useState<'idle' | 'upvoted' | 'downvoted' | 'submitting'>('idle');
@@ -98,17 +100,78 @@ export function PianoRoll({
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [isSendPositivePending, startSendPositive] = useTransition();
   const [isSendNegativePending, startSendNegative] = useTransition();
+  const [isControlsPanelOpen, setIsControlsPanelOpen] = useState(true);
+  const [gridScrollLeft, setGridScrollLeft] = useState(0);
+  const [isEventEditorCollapsed, setIsEventEditorCollapsed] = useState(false);
+
+  const floatingPanelClasses = useMemo(() => 'mobile-controls-container', []);
 
   const nextId = useRef(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const scheduledEventsRef = useRef<number[]>([]);
+  const gridViewportRef = useRef<HTMLDivElement>(null);
+  const pianoViewportRef = useRef<HTMLDivElement>(null);
+  const isSyncingScrollRef = useRef(false);
+  const lastFetchedKeyRef = useRef<string | null>(null);
   const { toast } = useToast();
   const dragUrlRef = useRef<string | null>(null);
 
-  const compositionMeasures = DEFAULT_MEASURES;
+  const compositionMeasures = MAX_COMPOSITION_MEASURES;
   const compositionBeats = compositionMeasures * 4;
   const gridBeats = measures * 4;
+  const gridHeightPx = PIANO_KEYS.length * ROW_HEIGHT * verticalZoom;
+
+  const syncPianoScroll = useCallback((scrollTop: number) => {
+    const pianoViewport = pianoViewportRef.current;
+    if (!pianoViewport) {
+      return;
+    }
+    if (Math.abs(pianoViewport.scrollTop - scrollTop) > 0.5) {
+      isSyncingScrollRef.current = true;
+      pianoViewport.scrollTop = scrollTop;
+      requestAnimationFrame(() => {
+        isSyncingScrollRef.current = false;
+      });
+    }
+  }, []);
+
+  const handleGridScroll = useCallback(() => {
+    const gridViewport = gridViewportRef.current;
+    if (!gridViewport) {
+      return;
+    }
+    setGridScrollLeft(gridViewport.scrollLeft);
+    syncPianoScroll(gridViewport.scrollTop);
+  }, [syncPianoScroll]);
+
+  const handlePianoScroll = useCallback(() => {
+    const pianoViewport = pianoViewportRef.current;
+    const gridViewport = gridViewportRef.current;
+    if (!pianoViewport || !gridViewport || isSyncingScrollRef.current) {
+      return;
+    }
+    if (Math.abs(gridViewport.scrollTop - pianoViewport.scrollTop) > 0.5) {
+      gridViewport.scrollTop = pianoViewport.scrollTop;
+    }
+  }, []);
+
+  useEffect(() => {
+    const gridViewport = gridViewportRef.current;
+    const pianoViewport = pianoViewportRef.current;
+
+    if (!gridViewport) {
+      return;
+    }
+
+    gridViewport.scrollTo({ left: 0, top: 0 });
+    if (pianoViewport) {
+      pianoViewport.scrollTo({ top: 0 });
+    }
+    setGridScrollLeft(0);
+    isSyncingScrollRef.current = false;
+    handleGridScroll();
+  }, [handleGridScroll, measures, cellPx, verticalZoom]);
 
   useEffect(() => {
     if (melody) {
@@ -235,6 +298,16 @@ export function PianoRoll({
   }, [currentKey]);
 
   useEffect(() => {
+    if (!debouncedKey) {
+      return;
+    }
+
+    if (lastFetchedKeyRef.current === debouncedKey) {
+      return;
+    }
+
+    lastFetchedKeyRef.current = debouncedKey;
+
     const fetchChords = async () => {
       setIsFetchingChords(true);
       setChordProgressions([]);
@@ -300,7 +373,8 @@ export function PianoRoll({
       slide: false,
     };
     setNotes(ns => [...ns, newNote]);
-    setSelectedNoteId(id);
+    setSelectedNoteIds([id]);
+    setActiveNoteId(id);
     const synth = synthRef.current;
     if (synth) {
       const noteName = indexToNote(pitch);
@@ -308,21 +382,43 @@ export function PianoRoll({
     }
   }, []);
 
-  const removeNote = useCallback(
-    (id: number) => {
-      setNotes(ns => ns.filter(n => n.id !== id));
-      if (selectedNoteId === id) {
-        setSelectedNoteId(null);
-      }
-    },
-    [selectedNoteId],
-  );
+  const removeNote = useCallback((id: number) => {
+    setNotes(ns => ns.filter(n => n.id !== id));
+    setSelectedNoteIds(ids => ids.filter(nId => nId !== id));
+    setActiveNoteId(current => (current === id ? null : current));
+  }, []);
 
   const updateNote = useCallback((id: number, patch: Partial<Note>) => {
     setNotes(ns => ns.map(n => (n.id === id ? { ...n, ...patch } : n)));
   }, []);
 
   const getNote = (id: number) => notes.find(n => n.id === id);
+
+  const handleSelectionChange = useCallback((ids: number[], activeId: number | null = ids.at(-1) ?? null) => {
+    setSelectedNoteIds(ids);
+    setActiveNoteId(activeId);
+  }, []);
+
+  const selectedNote = activeNoteId != null ? notes.find(n => n.id === activeNoteId) : undefined;
+  const selectedNotes = selectedNoteIds
+    .map(id => notes.find(n => n.id === id))
+    .filter((n): n is Note => Boolean(n));
+
+  useEffect(() => {
+    if (currentKey) {
+      setLastKey(currentKey);
+    }
+  }, [currentKey]);
+
+  useEffect(() => {
+    if (selectedChordProgression) {
+      setLastChordProgression(selectedChordProgression);
+    }
+  }, [selectedChordProgression]);
+
+  // ============================================================================
+  // BRAKUJĄCE FUNKCJE
+  // ============================================================================
 
   const scheduleNotes = useCallback(() => {
     scheduledEventsRef.current.forEach(id => Tone.Transport.clear(id));
@@ -337,27 +433,19 @@ export function PianoRoll({
     notes
       .filter(note => note.start < maxBeats)
       .forEach(note => {
-        if (typeof note.pitch !== 'number') {
-          return;
-        }
-
-        const remainingBeats = Math.max(0, maxBeats - note.start);
-        const playableBeats = Math.min(note.duration, remainingBeats);
-        if (playableBeats <= 0) {
-          return;
-        }
-
-        const noteName = indexToNote(note.pitch);
+        const noteName = indexToNote(note.pitch as number);
         const time = note.start * secondsPerBeat;
-        const duration = playableBeats * secondsPerBeat;
+        const duration = Math.min(note.duration, maxBeats - note.start) * secondsPerBeat;
 
-        const eventId = Tone.Transport.schedule(t => {
-          synth.triggerAttackRelease(noteName, duration, t, note.velocity / 127);
-        }, time);
+        if (duration > 0) {
+          const eventId = Tone.Transport.schedule(t => {
+            synth.triggerAttackRelease(noteName, duration, t, note.velocity / 127);
+          }, time);
 
-        scheduledEventsRef.current.push(eventId);
+          scheduledEventsRef.current.push(eventId);
+        }
       });
-  }, [notes, bpm, measures]);
+  }, [notes, bpm, compositionBeats]);
 
   const handlePlayToggle = async () => {
     if (Tone.context.state !== 'running') {
@@ -376,6 +464,66 @@ export function PianoRoll({
     setIsPlaying(p => !p);
   };
 
+  const handleImportMidiClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleMidiFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const midi = new Midi(arrayBuffer);
+
+      const newBpm = midi.header.tempos[0]?.bpm || 120;
+      setBpm(newBpm);
+
+      const ppq = midi.header.ppq;
+      const newNotes: Note[] = [];
+      let maxTimeInBeats = 0;
+
+      midi.tracks.forEach(track => {
+        track.notes.forEach(note => {
+          const pitchName = midiToNoteName(note.midi);
+          const pitchIndex = noteToIndex(pitchName);
+
+          if (pitchIndex !== -1) {
+            const startInBeats = note.ticks / ppq;
+            const durationInBeats = note.durationTicks / ppq;
+
+            newNotes.push({
+              id: nextId.current++,
+              start: startInBeats,
+              duration: durationInBeats,
+              pitch: pitchIndex,
+              velocity: Math.round(note.velocity * 127),
+              slide: false,
+            });
+            maxTimeInBeats = Math.max(maxTimeInBeats, startInBeats + durationInBeats);
+          }
+        });
+      });
+
+      const newMeasures = Math.ceil(maxTimeInBeats / 4);
+      const clampedMeasures = Math.max(4, Math.min(MAX_COMPOSITION_MEASURES, newMeasures));
+      setMeasures(clampedMeasures);
+      setNotes(newNotes);
+      toast({ title: 'MIDI Zaimportowane', description: 'Twoja kompozycja została załadowana.' });
+    } catch (error) {
+      console.error('Error parsing MIDI file:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Błąd wczytywania MIDI',
+        description: 'Nie udało się wczytać pliku MIDI.',
+      });
+    } finally {
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
   const buildMidiFile = () => {
     const TICKS_PER_BEAT = 480;
     const midi = new Midi();
@@ -387,22 +535,26 @@ export function PianoRoll({
       .map(note => {
         const remainingBeats = Math.max(0, compositionBeats - note.start);
         const playableBeats = Math.min(note.duration, remainingBeats);
+
         if (typeof note.pitch !== 'number' || playableBeats <= 0) {
           return null;
         }
+
         return {
           startTicks: Math.round(note.start * TICKS_PER_BEAT),
           durationTicks: Math.max(1, Math.round(playableBeats * TICKS_PER_BEAT)),
-          pitch: indexToMidiNote(note.pitch),
+          pitch: indexToMidiNote(note.pitch as number),
           velocity: Math.min(1, Math.max(0, note.velocity / 127)),
         };
       })
-      .filter((event): event is {
-        startTicks: number;
-        durationTicks: number;
-        pitch: number;
-        velocity: number;
-      } => event !== null)
+      .filter(
+        (event): event is {
+          startTicks: number;
+          durationTicks: number;
+          pitch: number;
+          velocity: number;
+        } => event !== null,
+      )
       .sort((a, b) => a.startTicks - b.startTicks);
 
     if (events.length > 0) {
@@ -454,6 +606,26 @@ export function PianoRoll({
     toast({ title: 'MIDI Eksportowane', description: 'Twoja kompozycja została pobrana.' });
   };
 
+  const exportJson = () => {
+    const currentMelody = melody?.melody ?? [];
+    const exportData = currentMelody.map(n => ({
+      note: n.note,
+      start: n.start,
+      duration: n.duration,
+      velocity: n.velocity,
+      slide: n.slide,
+    }));
+    const jsonString = JSON.stringify(exportData, null, 2);
+    navigator.clipboard.writeText(jsonString).then(
+      () => {
+        toast({ title: 'JSON Skopiowany', description: 'Dane nut zostały skopiowane do schowka.' });
+      },
+      () => {
+        toast({ variant: 'destructive', title: 'Błąd', description: 'Nie udało się skopiować danych JSON.' });
+      },
+    );
+  };
+
   const handleDragMidiStart = async (event: React.DragEvent<HTMLButtonElement>) => {
     const file = buildMidiFile();
     if (!file) {
@@ -498,264 +670,7 @@ export function PianoRoll({
   };
 
   const handleDragMidiEnd = () => {
-    if (dragUrlRef.current) {
-      URL.revokeObjectURL(dragUrlRef.current);
-      dragUrlRef.current = null;
-    }
-  };
-
-  const exportJson = () => {
-    const currentMelody = melody?.melody ?? [];
-    const exportData = currentMelody.map(n => ({
-      note: n.note,
-      start: n.start,
-      duration: n.duration,
-      velocity: n.velocity,
-      slide: n.slide,
-    }));
-    const jsonString = JSON.stringify(exportData, null, 2);
-    navigator.clipboard.writeText(jsonString).then(
-      () => {
-        toast({ title: 'JSON Skopiowany', description: 'Dane nut zostały skopiowane do schowka.' });
-      },
-      () => {
-        toast({ variant: 'destructive', title: 'Błąd', description: 'Nie udało się skopiować danych JSON.' });
-      },
-    );
-  };
-
-  const handleImportMidiClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleMidiFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const midi = new Midi(arrayBuffer);
-
-      const newBpm = midi.header.tempos[0]?.bpm || 120;
-      setBpm(newBpm);
-
-      const ppq = midi.header.ppq;
-      const newNotes: Note[] = [];
-      let maxTimeInBeats = 0;
-
-      midi.tracks.forEach(track => {
-        track.notes.forEach(note => {
-          const pitchName = midiToNoteName(note.midi);
-          const pitchIndex = noteToIndex(pitchName);
-
-          if (pitchIndex !== -1) {
-            const startInBeats = note.ticks / ppq;
-            const durationInBeats = note.durationTicks / ppq;
-
-            newNotes.push({
-              id: nextId.current++,
-              start: startInBeats,
-              duration: durationInBeats,
-              pitch: pitchIndex,
-              velocity: Math.round(note.velocity * 127),
-              slide: false,
-            });
-            maxTimeInBeats = Math.max(maxTimeInBeats, startInBeats + durationInBeats);
-          }
-        });
-      });
-
-      const newMeasures = Math.ceil(maxTimeInBeats / 4);
-      setMeasures(Math.max(DEFAULT_MEASURES, newMeasures));
-      setNotes(newNotes);
-      toast({ title: 'MIDI Zaimportowane', description: 'Twoja kompozycja została załadowana.' });
-    } catch (error) {
-      console.error('Error parsing MIDI file:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Błąd wczytywania MIDI',
-        description: 'Nie udało się wczytać pliku MIDI.',
-      });
-      return;
-    } finally {
-      if (event.target) {
-        event.target.value = '';
-      }
-    }
-  };
-
-  const handleGenerateMelody = async (
-    prompt: string,
-    key: string,
-    useExample: boolean,
-    chordProgression?: string,
-    youtubeUrl?: string,
-    exampleMelodyInput?: MelodyNote[],
-    generationMeasures?: number,
-    tempo?: number,
-    intensifyDarkness?: boolean,
-    generationGridResolution?: number,
-  ): Promise<void> => {
-    if (isPlaying) {
-      Tone.Transport.stop();
-      Tone.Transport.cancel();
-      scheduledEventsRef.current.forEach(id => Tone.Transport.clear(id));
-      scheduledEventsRef.current = [];
-      setIsPlaying(false);
-      setPlayPosition(0);
-    }
-
-    const targetMeasures = generationMeasures ?? measures;
-    let exampleMelody: MelodyNote[] | undefined = exampleMelodyInput;
-
-    if (selectedMidiExample) {
-      const result = await loadMidiFileAction(selectedMidiExample);
-      if (result.data) {
-        exampleMelody = result.data;
-        toast({
-          title: 'Inspiracja Załadowana',
-          description: `Użyto pliku ${selectedMidiExample} jako inspiracji.`,
-        });
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Błąd wczytywania MIDI',
-          description: result.error || 'Nie udało się wczytać pliku MIDI.',
-        });
-        return;
-      }
-    } else if (useExample && !exampleMelody) {
-      const C4_INDEX = noteToIndex('C4');
-      const C6_INDEX = noteToIndex('C6');
-
-      const gridMelody = notes
-        .filter(note => typeof note.pitch === 'number' && note.pitch >= C4_INDEX && note.pitch <= C6_INDEX)
-        .map(note => ({
-          note: indexToNote(note.pitch as number),
-          start: note.start,
-          duration: note.duration,
-          velocity: note.velocity,
-          slide: note.slide ?? false,
-        }));
-
-      if (gridMelody.length > 0) {
-        exampleMelody = gridMelody;
-      }
-    }
-
-    await onGenerateMelody(
-      prompt,
-      key,
-      useExample,
-      chordProgression,
-      youtubeUrl,
-      exampleMelody,
-      targetMeasures,
-      tempo,
-      intensifyDarkness,
-      generationGridResolution ?? gridResolution,
-    );
-    setLastPrompt(prompt);
-    setLastKey(key);
-    setLastChordProgression(chordProgression);
-    setLastIntensifyDarkness(Boolean(intensifyDarkness));
-    setFeedbackState('idle');
-    setNegativeReason('quality');
-    setNegativeNotes('');
-    setIsFeedbackDialogOpen(false);
-  };
-
-  const latestComposition = melody;
-
-  const canSendFeedback = Boolean(
-    latestComposition &&
-      latestComposition.melody?.length > 0 &&
-      lastPrompt &&
-      lastKey
-  );
-
-  const handleSendPositiveFeedback = () => {
-    if (!canSendFeedback || !latestComposition) {
-      return;
-    }
-    startSendPositive(async () => {
-      setIsSubmittingFeedback(true);
-      const result = await submitFeedbackAction({
-        rating: 'up',
-        prompt: lastPrompt,
-        key: lastKey,
-        measures,
-        tempo: bpm,
-        gridResolution,
-        chordProgression: lastChordProgression,
-        intensifyDarkness: lastIntensifyDarkness,
-        melody: latestComposition,
-      });
-      setIsSubmittingFeedback(false);
-      if (!result.ok) {
-        toast({
-          title: 'Nie udało się zapisać opinii',
-          description: result.error,
-          variant: 'destructive',
-        });
-        return;
-      }
-      setFeedbackState('upvoted');
-      toast({
-        title: 'Dzięki za opinię!',
-        description: 'Ta melodia zostanie użyta jako przykład do kolejnych generacji.',
-      });
-    });
-  };
-
-  const handleOpenNegativeFeedback = () => {
-    if (!canSendFeedback) {
-      return;
-    }
-    setIsFeedbackDialogOpen(true);
-  };
-
-  const handleSubmitNegativeFeedback = () => {
-    if (!canSendFeedback || !latestComposition) {
-      return;
-    }
-    startSendNegative(async () => {
-      setIsSubmittingFeedback(true);
-      const result = await submitFeedbackAction({
-        rating: 'down',
-        prompt: lastPrompt,
-        key: lastKey,
-        measures,
-        tempo: bpm,
-        gridResolution,
-        chordProgression: lastChordProgression,
-        intensifyDarkness: lastIntensifyDarkness,
-        reason: negativeReason,
-        notes: negativeNotes,
-        melody: latestComposition,
-      });
-      setIsSubmittingFeedback(false);
-      if (!result.ok) {
-        toast({
-          title: 'Nie udało się zapisać opinii',
-          description: result.error,
-          variant: 'destructive',
-        });
-        return;
-      }
-      setFeedbackState('downvoted');
-      setIsFeedbackDialogOpen(false);
-      toast({
-        title: 'Dzięki za opinię!',
-        description: 'Twoja uwaga pomoże ulepszyć przyszłe melodie.',
-      });
-    });
-  };
-
-  const handleTimelineWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    setCellPx(prev => Math.max(10, Math.min(100, prev * zoomFactor)));
+    dragUrlRef.current = null;
   };
 
   const toggleGhostExample = () => {
@@ -769,12 +684,192 @@ export function PianoRoll({
     }
   };
 
-  const selectedNote = notes.find(n => n.id === selectedNoteId);
+  const handleTimelineWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    setCellPx(prev => Math.max(10, Math.min(100, prev * zoomFactor)));
+  };
+
+  const shouldShowFeedbackPrompt = useMemo(() => {
+    return melody !== null && feedbackState === 'idle' && !isGenerating;
+  }, [melody, feedbackState, isGenerating]);
+
+  const handleSendPositiveFeedback = () => {
+    if (!melody) return;
+    setIsSubmittingFeedback(true);
+
+    startSendPositive(async () => {
+      try {
+        const melodyData: GenerateFullCompositionOutput = {
+          melody: melody.melody,
+          chords: melody.chords,
+          bassline: melody.bassline,
+        };
+
+        const promptForFeedback = lastPrompt?.trim() || 'melody';
+        const keyForFeedback = lastKey?.trim() || currentKey || 'unknown';
+
+        const result = await submitFeedbackAction({
+          rating: 'up',
+          prompt: promptForFeedback,
+          key: keyForFeedback,
+          chordProgression: lastChordProgression,
+          intensifyDarkness: lastIntensifyDarkness,
+          measures,
+          tempo: bpm,
+          gridResolution,
+          melody: melodyData,
+        });
+
+        if (result.ok) {
+          setFeedbackState('upvoted');
+          toast({
+            title: 'Dziękujemy!',
+            description: 'Twoja pozytywna opinia została zapisana.',
+          });
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('Failed to submit positive feedback:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Błąd',
+          description: 'Nie udało się wysłać opinii. Spróbuj ponownie.',
+        });
+      } finally {
+        setIsSubmittingFeedback(false);
+      }
+    });
+  };
+
+  const handleOpenNegativeFeedback = () => {
+    setIsFeedbackDialogOpen(true);
+  };
+
+  const handleSubmitNegativeFeedback = () => {
+    if (!melody) return;
+    setIsSubmittingFeedback(true);
+
+    startSendNegative(async () => {
+      try {
+        const melodyData: GenerateFullCompositionOutput = {
+          melody: melody.melody,
+          chords: melody.chords,
+          bassline: melody.bassline,
+        };
+
+        const promptForFeedback = lastPrompt?.trim() || 'melody';
+        const keyForFeedback = lastKey?.trim() || currentKey || 'unknown';
+
+        const result = await submitFeedbackAction({
+          rating: 'down',
+          reason: negativeReason,
+          notes: negativeNotes || undefined,
+          prompt: promptForFeedback,
+          key: keyForFeedback,
+          chordProgression: lastChordProgression,
+          intensifyDarkness: lastIntensifyDarkness,
+          measures,
+          tempo: bpm,
+          gridResolution,
+          melody: melodyData,
+        });
+
+        if (result.ok) {
+          setFeedbackState('downvoted');
+          setIsFeedbackDialogOpen(false);
+          setNegativeReason('quality');
+          setNegativeNotes('');
+          toast({
+            title: 'Dziękujemy!',
+            description: 'Twoja opinia pomoże nam ulepszyć generator.',
+          });
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('Failed to submit negative feedback:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Błąd',
+          description: 'Nie udało się wysłać opinii. Spróbuj ponownie.',
+        });
+      } finally {
+        setIsSubmittingFeedback(false);
+      }
+    });
+  };
+
+  const handleGenerateMelody = useCallback(
+    async (
+      prompt: string,
+      key: string,
+      useExample: boolean,
+      chordProgression?: string,
+      youtubeUrl?: string,
+      exampleMelody?: MelodyNote[],
+      measuresOverride?: number,
+      tempoOverride?: number,
+      intensifyDarkness?: boolean,
+      gridResolutionOverride?: number,
+    ) => {
+      const promptToStore = prompt?.trim() || 'melody';
+      setLastPrompt(promptToStore);
+      const keyToStore = key?.trim() || currentKey || 'unknown';
+      setLastKey(keyToStore);
+      setLastChordProgression(chordProgression);
+      setLastIntensifyDarkness(Boolean(intensifyDarkness));
+
+      await onGenerateMelody(
+        prompt,
+        key,
+        useExample,
+        chordProgression,
+        youtubeUrl,
+        exampleMelody,
+        measuresOverride,
+        tempoOverride,
+        intensifyDarkness,
+        gridResolutionOverride,
+      );
+    },
+    [currentKey, onGenerateMelody],
+  );
+
+  const controlsPanel = (
+    <ControlsPanel
+      measures={measures}
+      setMeasures={setMeasures}
+      cellPx={cellPx}
+      setCellPx={setCellPx}
+      verticalZoom={verticalZoom}
+      setVerticalZoom={setVerticalZoom}
+      selectedNote={selectedNote}
+      selectedNotes={selectedNotes}
+      onRemoveNote={removeNote}
+      onUpdateNote={updateNote}
+      onGenerateMelody={handleGenerateMelody}
+      isGenerating={isGenerating}
+      chordProgressions={chordProgressions}
+      isFetchingChords={isFetchingChords}
+      selectedChordProgression={selectedChordProgression}
+      setSelectedChordProgression={setSelectedChordProgression}
+      currentKey={currentKey}
+      setCurrentKey={setCurrentKey}
+      midiExamples={midiExamples}
+      selectedMidiExample={selectedMidiExample}
+      setSelectedMidiExample={setSelectedMidiExample}
+      bpm={bpm}
+      gridResolution={gridResolution}
+      setGridResolution={setGridResolution}
+    />
+  );
 
   return (
     <div className="flex flex-col h-full w-full font-body bg-background text-foreground relative">
       {isGenerating && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="flex flex-col items-center gap-6 w-80">
             <Disc3 className="w-24 h-24 text-primary animate-spin" />
             {generationProgress !== undefined ? (
@@ -810,127 +905,137 @@ export function PianoRoll({
         bpm={bpm}
         onBpmChange={setBpm}
       />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex flex-col">
-            <ScrollArea className="flex-grow" type="always">
-              <div className="flex">
-                <div className="w-20 shrink-0 sticky left-0 z-30 bg-card border-r" />
-                <div className="flex-grow">
-                  <Timeline beats={gridBeats} cellPx={cellPx} onWheel={handleTimelineWheel} />
-                </div>
+      <div className="flex flex-1 flex-col lg:flex-row min-h-0">
+        <div className="flex-1 min-h-0 min-w-0 grid grid-rows-[auto,1fr,auto] max-h-[calc(100vh-4.25rem)] sm:max-h-[calc(100vh-6.5rem)] pianoroll-landscape-grid">
+          <div className="border-b bg-card pr-2 py-2">
+            <div className="flex items-center">
+              <div className="w-20 shrink-0" />
+              <div className="flex-1 overflow-hidden">
+                <Timeline beats={gridBeats} cellPx={cellPx} onWheel={handleTimelineWheel} scrollLeft={gridScrollLeft} />
               </div>
-              <div className="flex relative">
-                <ScrollArea
-                  className="flex-grow overflow-auto"
-                  style={{ height: 'calc(100vh - 14rem)' }}
-                  viewportRef={useRef<HTMLDivElement>(null)}
-                >
-                  <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
-                  <Grid
-                    notes={notes}
-                    ghostNotes={ghostNotes}
-                    beats={gridBeats}
-                    cellPx={cellPx}
-                    verticalZoom={verticalZoom}
-                    playPosition={playPosition}
-                    onAddNote={addNote}
-                    onUpdateNote={updateNote}
-                    getNote={getNote}
-                    selectedNoteId={selectedNoteId}
-                    onSelectNote={setSelectedNoteId}
-                    gridResolution={gridResolution}
-                  />
-                </ScrollArea>
-              </div>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
+            </div>
           </div>
-          <EventEditor
-            notes={notes}
-            selectedNoteId={selectedNoteId}
-            onUpdateNote={updateNote}
-            cellPx={cellPx}
-          />
+          <div className="flex min-h-0 overflow-hidden">
+            <div className="relative left-0 z-20 w-20 shrink-0 overflow-hidden min-h-0">
+              <div
+                ref={pianoViewportRef}
+                className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide"
+                onScroll={handlePianoScroll}
+              >
+                <PianoKeys rowHeight={ROW_HEIGHT} verticalZoom={verticalZoom} />
+              </div>
+            </div>
+            <div
+              ref={gridViewportRef}
+              className="flex-1 overflow-auto min-h-0 min-w-0 scrollbar-hide"
+              onScroll={handleGridScroll}
+            >
+              <div
+                className="relative"
+                style={{ height: gridHeightPx, minWidth: gridBeats * cellPx }}
+              >
+                <Grid
+                  notes={notes}
+                  ghostNotes={ghostNotes}
+                  beats={gridBeats}
+                  cellPx={cellPx}
+                  verticalZoom={verticalZoom}
+                  playPosition={playPosition}
+                  selectedNoteIds={selectedNoteIds}
+                  onAddNote={addNote}
+                  onUpdateNote={updateNote}
+                  onRemoveNote={removeNote}
+                  getNote={getNote}
+                  onSelectionChange={handleSelectionChange}
+                  gridResolution={gridResolution}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 border-t border-border/70 bg-card/95 backdrop-blur-lg">
+            <EventEditor
+              notes={notes}
+              selectedNoteId={activeNoteId}
+              onUpdateNote={updateNote}
+              cellPx={cellPx}
+              isCollapsed={isEventEditorCollapsed}
+              onToggleCollapsed={() => setIsEventEditorCollapsed(value => !value)}
+            />
+          </div>
         </div>
-        <ControlsPanel
-          measures={measures}
-          setMeasures={setMeasures}
-          cellPx={cellPx}
-          setCellPx={setCellPx}
-          verticalZoom={verticalZoom}
-          setVerticalZoom={setVerticalZoom}
-          selectedNote={selectedNote}
-          onRemoveNote={removeNote}
-          onUpdateNote={updateNote}
-          onGenerateMelody={handleGenerateMelody}
-          isGenerating={isGenerating}
-          chordProgressions={chordProgressions}
-          isFetchingChords={isFetchingChords}
-          selectedChordProgression={selectedChordProgression}
-          setSelectedChordProgression={setSelectedChordProgression}
-          currentKey={currentKey}
-          setCurrentKey={setCurrentKey}
-          midiExamples={midiExamples}
-          selectedMidiExample={selectedMidiExample}
-          setSelectedMidiExample={setSelectedMidiExample}
-          bpm={bpm}
-          gridResolution={gridResolution}
-          setGridResolution={setGridResolution}
-        />
       </div>
 
-      <div className="border-t bg-card/60 backdrop-blur-sm p-4 flex flex-col gap-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold">Jak oceniasz tę melodię?</h3>
-            <p className="text-xs text-muted-foreground">
-              Opcjonalnie podziel się opinią – pomoże to ulepszyć kolejne generacje.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={feedbackState === 'upvoted' ? 'secondary' : 'outline'}
-              size="sm"
-              disabled={!canSendFeedback || feedbackState === 'upvoted' || isSubmittingFeedback || isSendPositivePending}
-              onClick={handleSendPositiveFeedback}
-              className="flex items-center gap-1"
-            >
-              {isSubmittingFeedback && (isSendPositivePending || feedbackState === 'submitting') ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ThumbsUp className="h-4 w-4" />
-              )}
-              <span>Kciuk w górę</span>
-            </Button>
-            <Button
-              variant={feedbackState === 'downvoted' ? 'secondary' : 'outline'}
-              size="sm"
-              disabled={!canSendFeedback || feedbackState === 'downvoted'}
-              onClick={handleOpenNegativeFeedback}
-              className="flex items-center gap-1"
-            >
-              <ThumbsDown className="h-4 w-4" />
-              <span>Kciuk w dół</span>
-            </Button>
+      {isControlsPanelOpen ? (
+        <div className={floatingPanelClasses}>
+          <div className="mobile-controls-surface">
+            <div className="absolute top-2 right-2 z-10">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full bg-black/25 hover:bg-black/35"
+                onClick={() => setIsControlsPanelOpen(false)}
+              >
+                <X className="h-3.5 w-3.5" />
+                <span className="sr-only">Ukryj panel</span>
+              </Button>
+            </div>
+            <div className="mobile-controls-content px-4 pt-5 pb-5">
+              {controlsPanel}
+            </div>
           </div>
         </div>
-        {feedbackState === 'upvoted' && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400">
-            ✓ Dodano do zestawu przykładów – dzięki!
-          </p>
-        )}
-        {feedbackState === 'downvoted' && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            ✓ Zapisano uwagę. Postaramy się poprawić kolejne generacje.
-          </p>
-        )}
-        {!canSendFeedback && (
-          <p className="text-xs text-muted-foreground">
-            Wygeneruj melodię, aby móc ją ocenić.
-          </p>
-        )}
-      </div>
+      ) : (
+        <div className="fixed bottom-[max(env(safe-area-inset-bottom,0px)+16px,24px)] right-4 z-40 lg:top-24 lg:bottom-auto lg:right-[clamp(1.5rem,4vw,3rem)]">
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={() => setIsControlsPanelOpen(true)}
+            className="h-14 w-14 rounded-full shadow-lg shadow-black/40"
+          >
+            <Settings2 className="h-6 w-6" />
+            <span className="sr-only">Pokaż ustawienia</span>
+          </Button>
+        </div>
+      )}
+
+      {shouldShowFeedbackPrompt && !isFeedbackDialogOpen && (
+        <div className="fixed left-6 bottom-6 z-30 max-w-[22rem] animate-in fade-in slide-in-from-bottom-2">
+          <div className="rounded-2xl border border-white/10 bg-card/95 shadow-xl shadow-black/40 backdrop-blur-md p-4 flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Jak oceniasz tę melodię?</h3>
+              <p className="text-xs text-muted-foreground">
+                Twoja opinia pomoże ulepszyć przyszłe generacje.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSendPositiveFeedback}
+                disabled={isSubmittingFeedback || isSendPositivePending}
+                className="flex items-center gap-1"
+              >
+                {isSubmittingFeedback && isSendPositivePending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ThumbsUp className="h-4 w-4" />
+                )}
+                <span>Kciuk w górę</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenNegativeFeedback}
+                disabled={isSubmittingFeedback}
+                className="flex items-center gap-1"
+              >
+                <ThumbsDown className="h-4 w-4" />
+                <span>Kciuk w dół</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Dialog open={isFeedbackDialogOpen} onOpenChange={setIsFeedbackDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -981,7 +1086,7 @@ export function PianoRoll({
               disabled={isSubmittingFeedback || isSendNegativePending}
               className="flex items-center gap-2"
             >
-              {(isSubmittingFeedback && isSendNegativePending) ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isSubmittingFeedback && isSendNegativePending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Wyślij opinię
             </Button>
           </DialogFooter>

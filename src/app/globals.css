@@ -2,8 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
 body {
   font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+input,
+textarea,
+select,
+button {
+  font-size: 16px;
+}
+
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px !important;
+  }
 }
 
 @layer base {
@@ -83,6 +106,69 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-card text-foreground;
+  }
+}
+
+@layer components {
+  .mobile-controls-container {
+    @apply flex;
+    position: fixed;
+    right: min(2rem, max(0.75rem, 2vw));
+    z-index: 40;
+    top: calc(env(safe-area-inset-top, 0px) + 54px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+    width: min(90vw, 18rem);
+  }
+
+  @media (min-width: 1024px) {
+    .mobile-controls-container {
+      top: calc(env(safe-area-inset-top, 0px) + 76px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+      right: clamp(1.5rem, 4vw, 3rem);
+      width: 20rem;
+    }
+  }
+
+  @media (max-width: 1023.98px) and (orientation: landscape) {
+    .mobile-controls-container {
+      top: calc(env(safe-area-inset-top, 0px) + 56px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
+      left: auto;
+      right: clamp(1rem, 6vw, 2.5rem);
+      width: clamp(14rem, 32vw, 18rem);
+    }
+
+    .mobile-controls-content {
+      padding-top: 1.5rem;
+      padding-bottom: 1.5rem;
+    }
+
+    .pianoroll-landscape-grid {
+      grid-template-rows: auto minmax(0, 1fr) minmax(0, 9rem);
+    }
+  }
+
+  .mobile-controls-surface {
+    @apply relative flex h-full w-full flex-col rounded-2xl border border-white/10 shadow-2xl shadow-black/40 backdrop-blur-md bg-card;
+    background: linear-gradient(
+      180deg,
+      hsl(var(--card) / 0.97) 0%,
+      hsl(var(--card) / 0.94) 50%,
+      hsl(var(--card) / 0.9) 100%
+    );
+  }
+
+  .mobile-controls-content {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .scrollbar-hide {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }

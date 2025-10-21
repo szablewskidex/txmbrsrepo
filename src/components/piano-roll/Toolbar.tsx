@@ -24,25 +24,46 @@ export function Toolbar({
   isPlaying, onPlayToggle, onExportMidi, onDragMidiStart, onDragMidiEnd, onExportJson, onImportMidiClick, onToggleGhost,
   bpm, onBpmChange
 }: ToolbarProps) {
+  const [bpmInput, setBpmInput] = React.useState<string>(() => (Number.isFinite(bpm) ? String(bpm) : ''));
+
+  React.useEffect(() => {
+    const nextValue = Number.isFinite(bpm) ? String(bpm) : '';
+    setBpmInput(nextValue);
+  }, [bpm]);
+
+  const handleBpmChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = event.target.value;
+    setBpmInput(rawValue);
+
+    const parsed = Number.parseInt(rawValue, 10);
+    if (!Number.isNaN(parsed)) {
+      const clamped = Math.min(240, Math.max(40, parsed));
+      if (clamped !== bpm) {
+        onBpmChange(clamped);
+      }
+    }
+  };
+
   return (
-    <header className="flex items-center h-14 px-4 bg-card border-b shrink-0">
-      <h1 className="text-xl font-bold tracking-tight text-foreground">PianoRoll<span className="text-primary">AI</span></h1>
-      <Separator orientation="vertical" className="h-6 mx-4" />
-      <div className="flex items-center gap-2">
+    <header className="flex items-center h-12 px-3 bg-card border-b shrink-0 sm:h-14 sm:px-4">
+      <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">PianoRoll<span className="text-primary">AI</span></h1>
+      <Separator orientation="vertical" className="h-6 mx-3 sm:mx-4" />
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <Button variant="ghost" size="icon" onClick={onPlayToggle}>
           {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
           <span className="sr-only">{isPlaying ? 'Pauza' : 'Odtwarzaj'}</span>
         </Button>
-         <div className="flex items-center gap-2">
+         <div className="flex items-center gap-1.5 sm:gap-2">
             <Label htmlFor="bpm" className="text-sm font-medium">BPM</Label>
-            <Input 
+            <Input
                 id="bpm"
                 type="number"
-                value={bpm}
-                onChange={(e) => onBpmChange(parseInt(e.target.value, 10))}
-                className="w-20 h-8"
+                value={bpmInput}
+                onChange={handleBpmChange}
+                className="w-16 h-8 sm:w-20"
                 min={40}
                 max={240}
+                inputMode="numeric"
             />
         </div>
         <Separator orientation="vertical" className="h-6 mx-2" />

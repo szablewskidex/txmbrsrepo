@@ -13,7 +13,7 @@ export function PianoKeys({ verticalZoom, rowHeight }: PianoKeysProps) {
   const reversedKeys = React.useMemo(() => [...PIANO_KEYS].reverse(), []);
 
   return (
-    <div className="w-20 bg-card select-none shrink-0 sticky left-0 z-20">
+    <div className="w-20 bg-card select-none shrink-0">
       {reversedKeys.map(key => {
         const isBlackKey = key.includes('#');
         return (
