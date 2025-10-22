@@ -1,28 +1,28 @@
 export type LocalChordProgressions = Record<string, string[]>;
 
 const BASE_PROGRESSIONS: LocalChordProgressions = {
-  'c major': ['C-G-Am-F', 'C-Am-F-G', 'F-C-Dm-Bb'],
-  'a minor': ['Am-G-F-E', 'Am-F-C-G', 'Am-Dm-E-Am'],
-  'g major': ['G-D-Em-C', 'G-Em-C-D', 'G-Bm-Em-C'],
-  'e minor': ['Em-C-G-D', 'Em-D-C-G', 'Em-Bm-C-Am'],
-  'd major': ['D-A-Bm-G', 'D-G-A-D', 'D-Bm-G-A'],
-  'b minor': ['Bm-G-D-A', 'Bm-A-G-F#', 'Bm-Em-F#m-Bm'],
-  'a major': ['A-D-E-A', 'A-F#m-D-E', 'A-Bm-F#m-D'],
-  'f# minor': ['F#m-D-A-E', 'F#m-E-D-C#m', 'F#m-Bm-C#m-F#m'],
-  'e major': ['E-B-C#m-A', 'E-A-E-B', 'E-G#m-C#m-A'],
-  'c# minor': ['C#m-A-E-B', 'C#m-B-A-E', 'C#m-G#m-A-B'],
-  'f major': ['F-C-Dm-Bb', 'F-Bb-C-F', 'F-Am-Bb-C'],
-  'd minor': ['Dm-Bb-F-C', 'Dm-C-Bb-A', 'Dm-Gm-C-A'],
-  'bb major': ['Bb-F-Gm-Eb', 'Bb-Eb-Gm-F', 'Bb-Dm-Gm-Eb'],
-  'g minor': ['Gm-Eb-F-D', 'Gm-Dm-Eb-F', 'Gm-Bb-Dm-F'],
-  'eb major': ['Eb-Bb-Cm-Ab', 'Eb-Ab-Bb-Eb', 'Eb-Cm-Ab-Bb'],
-  'c minor': ['Cm-Ab-Bb-G', 'Cm-Gm-Ab-Eb', 'Cm-Fm-G-Ab'],
-  'ab major': ['Ab-Eb-Fm-Db', 'Ab-Db-Eb-Ab', 'Ab-Fm-Db-Eb'],
-  'f minor': ['Fm-Db-Eb-C', 'Fm-Cm-Db-Eb', 'Fm-Ab-Db-Eb'],
-  'db major': ['Db-Ab-Bbm-Gb', 'Db-Gb-Ab-Db', 'Db-Fm-Gb-Ab'],
-  'bb minor': ['Bbm-Gb-Ab-Eb', 'Bbm-Ebm-F-Eb', 'Bbm-Db-Ebm-F'],
-  'gb major': ['Gb-Db-Ebm-Cb', 'Gb-Cb-Db-Gb', 'Gb-Ebm-Db-Cb'],
-  'eb minor': ['Ebm-Cb-Db-Bb', 'Ebm-Bbm-Cb-Db', 'Ebm-Abm-Bbm-Db'],
+  'c major': ['C-G-Am-F', 'C-Am-F-G', 'C-Em'],
+  'a minor': ['Am-Dm-E7-Am', 'Am-Em', 'Am-Bdim-E7'],
+  'g major': ['G-D-Em-C', 'G-Em-C-D', 'G-Bm'],
+  'e minor': ['Em-Am-B7-Em', 'Em-Bm', 'Em-F#dim-B7'],
+  'd major': ['D-A-Bm-G', 'D-Bm-G-A', 'D-F#m'],
+  'b minor': ['Bm-Em-F#7-Bm', 'Bm-F#m', 'Bm-C#dim-F#7'],
+  'a major': ['A-D-E-A', 'A-F#m-D-E', 'A-C#m'],
+  'f# minor': ['F#m-Bm-C#7-F#m', 'F#m-C#m', 'F#m-G#dim-C#7'],
+  'e major': ['E-B-C#m-A', 'E-A-E-B', 'E-G#m'],
+  'c# minor': ['C#m-F#m-G#7-C#m', 'C#m-G#m', 'C#m-D#dim-G#7'],
+  'f major': ['F-C-Dm-Bb', 'F-Bb-C-F', 'F-Am'],
+  'd minor': ['Dm-Gm-A7-Dm', 'Dm-Am', 'Dm-Edim-A7'],
+  'bb major': ['Bb-F-Gm-Eb', 'Bb-Eb-Gm-F', 'Bb-Dm'],
+  'g minor': ['Gm-Cm-D7-Gm', 'Gm-Dm', 'Gm-Adim-D7'],
+  'eb major': ['Eb-Bb-Cm-Ab', 'Eb-Ab-Bb-Eb', 'Eb-Gm'],
+  'c minor': ['Cm-Fm-G7-Cm', 'Cm-Gm', 'Cm-Ddim-G7'],
+  'ab major': ['Ab-Eb-Fm-Db', 'Ab-Db-Eb-Ab', 'Ab-Cm'],
+  'f minor': ['Fm-Bbm-C7-Fm', 'Fm-Cm', 'Fm-Gdim-C7'],
+  'db major': ['Db-Ab-Bbm-Gb', 'Db-Gb-Ab-Db', 'Db-Fm'],
+  'bb minor': ['Bbm-Ebm-F7-Bbm', 'Bbm-Fm', 'Bbm-Cdim-F7'],
+  'gb major': ['Gb-Db-Ebm-Cb', 'Gb-Cb-Db-Gb', 'Gb-Bbm'],
+  'eb minor': ['Ebm-Abm-Bb7-Ebm', 'Ebm-Bbm', 'Ebm-Fdim-Bb7'],
 };
 
 const KEY_SYNONYMS: Record<string, string[]> = {
@@ -113,8 +113,14 @@ const MINOR_KEY_CHORDS: Record<string, [string, string, string, string, string, 
   'eb minor': ['Ebm', 'Fdim', 'Gb', 'Abm', 'Bbm', 'Cb', 'Db'],
 };
 
-const MAJOR_ROMAN_TEMPLATES = ['I-vi', 'I-V-IV', 'I-V-vi-IV', 'ii-V-I', 'I-I-I-I'];
-const MINOR_ROMAN_TEMPLATES = ['i-v', 'VI-v-i', 'i-III-VI-VII', 'i-VI-v-i', 'III-i', 'i-VI-VII-v', 'i-i-i-i'];
+const MAJOR_ROMAN_TEMPLATES = ['I-vi', 'I-V-IV', 'ii-V-I', 'I-IV'];
+const MINOR_ROMAN_TEMPLATES = [
+  'i-iv-V-i',      // Klasyczna z dominantą
+  'i-v',           // 2-chordowa minimalna
+  'i-II-V',        // Z diminished
+  'i-iv',          // 2-chordowa subdominanta
+  'i-v-iv-V',      // Rozbudowana
+];
 
 function normalizeKey(key: string): string {
   return key.trim().toLowerCase();

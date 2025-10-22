@@ -12,9 +12,10 @@ export async function getMidiExamplesAction(): Promise<{ data: string[] | null; 
     const files = await fs.readdir(directoryPath);
     const midiFiles = files.filter(file => file.endsWith('.mid') || file.endsWith('.midi'));
     return { data: midiFiles, error: null };
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      console.warn('MIDI examples directory not found:', error.path);
+  } catch (error: unknown) {
+    const err = error as NodeJS.ErrnoException;
+    if (err?.code === 'ENOENT') {
+      console.warn('MIDI examples directory not found:', err?.path);
       return { data: [], error: 'MIDI examples directory `src/lib/midi-examples` not found.' };
     }
     console.error('Error reading MIDI examples directory:', error);
@@ -58,7 +59,7 @@ export async function loadMidiFileAction(fileName: string): Promise<{ data: Melo
     melody.sort((a, b) => a.start - b.start);
 
     return { data: melody, error: null };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Error loading MIDI file ${fileName}:`, error);
     return { data: null, error: `Could not load or parse file: ${fileName}` };
   }

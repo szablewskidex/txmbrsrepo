@@ -39,6 +39,7 @@ interface ControlsPanelProps {
     tempo?: number,
     intensifyDarkness?: boolean,
     gridResolution?: number,
+    fastMode?: boolean,
   ) => Promise<void>;
   isGenerating: boolean;
   chordProgressions: string[];
@@ -110,6 +111,25 @@ export function ControlsPanel({
       bpm,
       intensifyDarkness,
       gridResolution,
+      false, // fastMode = false
+    );
+  };
+
+  const handleFastGenerate = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isGenerating || (!prompt && !youtubeUrl)) return;
+    await onGenerateMelody(
+      prompt,
+      currentKey,
+      useExample,
+      selectedChordProgression,
+      youtubeUrl,
+      undefined,
+      DEFAULT_MEASURES,
+      bpm,
+      intensifyDarkness,
+      gridResolution,
+      true, // fastMode = true
     );
   };
 
@@ -308,9 +328,18 @@ export function ControlsPanel({
                 <Label htmlFor="intensify-darkness">Wzmocnij mroczny klimat</Label>
               </div>
             </CardContent>
-            <CardFooter className="px-3 pb-3">
+            <CardFooter className="px-3 pb-3 flex flex-col gap-2">
               <Button type="submit" className="w-full" disabled={isGenerating || (!prompt && !youtubeUrl)}>
                 {isGenerating ? 'Generowanie...' : 'Generuj melodię'}
+              </Button>
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full" 
+                disabled={isGenerating || (!prompt && !youtubeUrl)}
+                onClick={handleFastGenerate}
+              >
+                {isGenerating ? 'Generowanie...' : '⚡ Szybkie generowanie'}
               </Button>
             </CardFooter>
           </form>

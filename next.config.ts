@@ -1,5 +1,11 @@
 import type {NextConfig} from 'next';
 
+// Load environment variables
+if (typeof process !== 'undefined') {
+  require('dotenv').config({ path: '.env' });
+  require('dotenv').config({ path: '.env.local', override: true });
+}
+
 const nextConfig: NextConfig = {
   /* config options here */
   allowedDevOrigins: [

@@ -183,6 +183,7 @@ export default function Home() {
     tempo?: number,
     intensifyDarkness?: boolean,
     gridResolution?: number,
+    fastMode?: boolean,
   ) => {
     setIsGenerating(true);
     setOverlayStep('Łączenie z modelem...');
@@ -202,7 +203,7 @@ export default function Home() {
 
     overlayClearTimeoutRef.current = setTimeout(() => {
       setOverlayStep(undefined);
-    }, 600);
+    }, 250);
 
     let encounteredError = false;
 
@@ -232,6 +233,7 @@ export default function Home() {
           tempo,
           intensifyDarkness,
           gridResolution,
+          fastMode,
         });
 
         if (result.error) {
@@ -267,7 +269,7 @@ export default function Home() {
         return;
       }
 
-      const cleanupDelay = encounteredError ? 2000 : 500;
+      const cleanupDelay = encounteredError ? 1500 : 200;
 
       if (overlayClearTimeoutRef.current) {
         clearTimeout(overlayClearTimeoutRef.current);

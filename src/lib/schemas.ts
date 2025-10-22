@@ -23,6 +23,7 @@ export const GenerateMelodyInputSchema = z.object({
   layers: z.array(LayerEnum).min(1).max(3).optional().describe('Optional explicit selection of layers to generate (melody, chords, bassline).'),
   gridResolution: z.number().min(0.0625).max(0.5).default(0.25).optional()
     .describe('Grid quantization resolution (0.25 = 16th notes, 0.125 = 32nd notes).'),
+  fastMode: z.boolean().optional().describe('Enable fast generation mode with reduced quality checks for faster results.'),
 });
 export type GenerateMelodyInput = z.infer<typeof GenerateMelodyInputSchema>;
 

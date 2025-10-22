@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getMidiExamplesAction, loadMidiFileAction } from '../../app/midi-actions';
 import { suggestChordProgressionsAction } from '../../app/ai-actions';
 import type { GenerateFullCompositionOutput, MelodyNote } from '@/lib/schemas';
-import { Disc3, Loader2, ThumbsDown, ThumbsUp, Settings2, X } from 'lucide-react';
+import { Disc3, Loader2, ThumbsDown, ThumbsUp, Settings2, X, GripVertical } from 'lucide-react';
 
 import { Toolbar } from './Toolbar';
 import { PianoKeys } from './PianoKeys';
@@ -103,6 +103,21 @@ export function PianoRoll({
   const [isControlsPanelOpen, setIsControlsPanelOpen] = useState(true);
   const [gridScrollLeft, setGridScrollLeft] = useState(0);
   const [isEventEditorCollapsed, setIsEventEditorCollapsed] = useState(false);
+  const [volume, setVolume] = useState(75);
+  const [instrument, setInstrument] = useState<'piano' | 'guitar'>('piano');
+  const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [panelHeight, setPanelHeight] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return parseInt(localStorage.getItem('piano-roll-panel-height') || '400');
+    }
+    return 400;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState(0);
+  const resizeStartHeight = useRef(0);
+  const resumeAfterGenerationRef = useRef(false);
 
   const floatingPanelClasses = useMemo(() => 'mobile-controls-container', []);
 
@@ -156,6 +171,129 @@ export function PianoRoll({
     }
   }, []);
 
+  const handlePanelMouseDown = useCallback((e: React.MouseEvent) => {
+    // Tylko drag handle może inicjować przeciąganie
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - panelPosition.x,
+      y: e.clientY - panelPosition.y,
+    });
+  }, [panelPosition]);
+
+  const handlePanelTouchStart = useCallback((e: React.TouchEvent) => {
+    // Tylko drag handle może inicjować przeciąganie
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({
+      x: touch.clientX - panelPosition.x,
+      y: touch.clientY - panelPosition.y,
+    });
+  }, [panelPosition]);
+
+  const handlePanelMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return;
+    
+    let newX = e.clientX - dragStart.x;
+    let newY = e.clientY - dragStart.y;
+    
+    // Ograniczenia, żeby panel nie wyszedł poza ekran
+    const maxX = window.innerWidth - 320; // szerokość panelu ~320px
+    const maxY = window.innerHeight - 200; // minimalna wysokość widoczna
+    newX = Math.max(-250, Math.min(newX, maxX));
+    newY = Math.max(-50, Math.min(newY, maxY));
+    
+    setPanelPosition({ x: newX, y: newY });
+  }, [isDragging, dragStart]);
+
+  const handlePanelTouchMove = useCallback((e: TouchEvent) => {
+    if (!isDragging) return;
+    
+    // Zapobiegnij scrollowaniu podczas przeciągania
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const touch = e.touches[0];
+    let newX = touch.clientX - dragStart.x;
+    let newY = touch.clientY - dragStart.y;
+    
+    // Ograniczenia, żeby panel nie wyszedł poza ekran
+    const maxX = window.innerWidth - 320;
+    const maxY = window.innerHeight - 200;
+    newX = Math.max(-250, Math.min(newX, maxX));
+    newY = Math.max(-50, Math.min(newY, maxY));
+    
+    setPanelPosition({ x: newX, y: newY });
+  }, [isDragging, dragStart]);
+
+  const handlePanelMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsResizing(true);
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setResizeStart(clientY);
+    resizeStartHeight.current = panelHeight; // Zapamiętaj początkową wysokość
+  }, [panelHeight]);
+
+  const handleResizeMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isResizing) return;
+    
+    e.preventDefault();
+    
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const deltaY = clientY - resizeStart; // Przeciąganie w dół = dodatnia delta
+    // Dla resize handle na dole: przeciąganie w dół = powiększanie panelu
+    const maxHeight = window.innerHeight - 100; // Dynamiczny max - 100px marginesu od góry/dołu
+    const newHeight = Math.max(120, Math.min(maxHeight, resizeStartHeight.current + deltaY));
+    
+    setPanelHeight(newHeight);
+  }, [isResizing, resizeStart]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handlePanelMouseMove);
+      window.addEventListener('mouseup', handlePanelMouseUp);
+      window.addEventListener('touchmove', handlePanelTouchMove, { passive: false });
+      window.addEventListener('touchend', handlePanelMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handlePanelMouseMove);
+        window.removeEventListener('mouseup', handlePanelMouseUp);
+        window.removeEventListener('touchmove', handlePanelTouchMove);
+        window.removeEventListener('touchend', handlePanelMouseUp);
+      };
+    }
+  }, [isDragging, handlePanelMouseMove, handlePanelTouchMove, handlePanelMouseUp]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleResizeMove);
+      window.addEventListener('mouseup', handleResizeEnd);
+      window.addEventListener('touchmove', handleResizeMove, { passive: false });
+      window.addEventListener('touchend', handleResizeEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleResizeMove);
+        window.removeEventListener('mouseup', handleResizeEnd);
+        window.removeEventListener('touchmove', handleResizeMove);
+        window.removeEventListener('touchend', handleResizeEnd);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
   useEffect(() => {
     const gridViewport = gridViewportRef.current;
     const pianoViewport = pianoViewportRef.current;
@@ -171,34 +309,111 @@ export function PianoRoll({
     setGridScrollLeft(0);
     isSyncingScrollRef.current = false;
     handleGridScroll();
-  }, [handleGridScroll, measures, cellPx, verticalZoom]);
+  }, [handleGridScroll, measures, verticalZoom]);
+
+  const convertAiNotes = (aiNotes: MelodyNote[], layerName: string = 'unknown'): Note[] => {
+    if (!Array.isArray(aiNotes) || aiNotes.length === 0) {
+      console.warn(`[CONVERT] No notes in ${layerName} layer`);
+      return [];
+    }
+
+    let invalidCount = 0;
+    const converted = aiNotes
+      .map((aiNote, index) => {
+        // Walidacja obiektu nuty
+        if (!aiNote || typeof aiNote !== 'object') {
+          console.warn(`[CONVERT] Invalid note object at index ${index} in ${layerName}:`, aiNote);
+          invalidCount++;
+          return null;
+        }
+
+        // Walidacja pól
+        if (!aiNote.note || typeof aiNote.note !== 'string') {
+          console.warn(`[CONVERT] Missing or invalid note name at index ${index} in ${layerName}:`, aiNote);
+          invalidCount++;
+          return null;
+        }
+
+        if (typeof aiNote.start !== 'number' || typeof aiNote.duration !== 'number') {
+          console.warn(`[CONVERT] Invalid start/duration at index ${index} in ${layerName}:`, aiNote);
+          invalidCount++;
+          return null;
+        }
+
+        const pitchIndex = noteToIndex(aiNote.note);
+        if (pitchIndex === -1) {
+          console.warn(`[CONVERT] AI generated invalid note at index ${index} in ${layerName}:`, {
+            note: aiNote.note,
+            suggestion: 'Should be format like C4, D#5, Bb3, etc.',
+          });
+          invalidCount++;
+          return null;
+        }
+
+        const convertedNote: Note = {
+          id: nextId.current++,
+          start: aiNote.start,
+          duration: aiNote.duration,
+          pitch: pitchIndex,
+          velocity: aiNote.velocity ?? 100,
+          slide: aiNote.slide ?? false,
+        };
+        return convertedNote;
+      })
+      .filter((n): n is Note => n !== null);
+
+    if (invalidCount > 0) {
+      console.warn(`[CONVERT] ${layerName}: ${invalidCount}/${aiNotes.length} notes were invalid`);
+    } else {
+      console.log(`[CONVERT] ${layerName}: Successfully converted ${converted.length} notes`);
+    }
+
+    return converted;
+  };
 
   useEffect(() => {
     if (melody) {
-      const convertAiNotes = (aiNotes: MelodyNote[]): Note[] => {
-        return aiNotes
-          .map(aiNote => {
-            const pitchIndex = noteToIndex(aiNote.note);
-            if (pitchIndex === -1) {
-              console.warn(`AI generated an invalid note: ${aiNote.note}`);
-              return null;
-            }
-            const convertedNote: Note = {
-              id: nextId.current++,
-              start: aiNote.start,
-              duration: aiNote.duration,
-              pitch: pitchIndex,
-              velocity: aiNote.velocity,
-              slide: aiNote.slide,
-            };
-            return convertedNote;
-          })
-          .filter((n): n is Note => n !== null);
-      };
+      // Walidacja tempo
+      if (typeof melody.tempo === 'number' && !Number.isNaN(melody.tempo)) {
+        const clampedTempo = Math.max(20, Math.min(400, Math.round(melody.tempo)));
+        setBpm(clampedTempo);
+        console.log('[PIANO_ROLL] Set tempo to:', clampedTempo);
+      }
 
-      const newMelody = convertAiNotes(melody.melody);
-      const newChords = convertAiNotes(melody.chords);
-      const newBassline = convertAiNotes(melody.bassline);
+      // Konwertuj wszystkie warstwy z labelami
+      const newMelody = convertAiNotes(melody.melody, 'melody');
+      const newChords = convertAiNotes(melody.chords, 'chords');
+      const newBassline = convertAiNotes(melody.bassline, 'bassline');
+
+      // Sprawdź czy cokolwiek zostało skonwertowane
+      const totalConverted = newMelody.length + newChords.length + newBassline.length;
+      const totalOriginal = 
+        (melody.melody?.length ?? 0) + 
+        (melody.chords?.length ?? 0) + 
+        (melody.bassline?.length ?? 0);
+
+      if (totalConverted === 0 && totalOriginal > 0) {
+        console.error('[PIANO_ROLL] All notes failed conversion!', {
+          melodySamples: melody.melody?.slice(0, 3),
+          chordsSamples: melody.chords?.slice(0, 3),
+          basslineSamples: melody.bassline?.slice(0, 3),
+        });
+        toast({
+          variant: 'destructive',
+          title: 'Błąd konwersji melodii',
+          description: 'Wszystkie nuty zostały odrzucone. Sprawdź konsolę dla szczegółów.',
+        });
+        return;
+      }
+
+      if (totalConverted < totalOriginal * 0.8) {
+        console.warn('[PIANO_ROLL] More than 20% notes were invalid!');
+        toast({
+          variant: 'default',
+          title: 'Ostrzeżenie',
+          description: `${totalOriginal - totalConverted} nut zostało odrzuconych z powodu błędów.`,
+        });
+      }
 
       const allNotes = [...newMelody, ...newChords, ...newBassline];
       allNotes.sort((a, b) => a.start - b.start);
@@ -226,30 +441,61 @@ export function PianoRoll({
         setNotes(clampedNotes);
         const maxId = Math.max(...clampedNotes.map(n => n.id));
         nextId.current = maxId + 1;
+        console.log('[PIANO_ROLL] Loaded composition:', {
+          melody: newMelody.length,
+          chords: newChords.length,
+          bassline: newBassline.length,
+          total: clampedNotes.length,
+          measures: Math.ceil(Math.max(...clampedNotes.map(n => n.start + n.duration)) / 4),
+        });
       } else {
+        console.warn('[PIANO_ROLL] No valid notes after clamping');
         setNotes([]);
       }
     } else {
       setNotes([]);
     }
-  }, [melody, measures]);
+  }, [melody, compositionBeats, toast]);
 
+  // Zapisz wysokość panelu do localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      synthRef.current = new Tone.PolySynth({
-        maxPolyphony: 64,
-        voice: Tone.Synth,
-        options: {
-          oscillator: { type: 'triangle8' },
-          envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 },
-        },
-      }).toDestination();
-      Tone.Transport.bpm.value = bpm;
+      localStorage.setItem('piano-roll-panel-height', panelHeight.toString());
     }
+  }, [panelHeight]);
+
+  const createSynth = useCallback(() => {
+    const voiceOptions =
+      instrument === 'guitar'
+        ? {
+            oscillator: { type: 'fatsawtooth' as const },
+            envelope: { attack: 0.005, decay: 0.25, sustain: 0.2, release: 1.2 },
+          }
+        : {
+            oscillator: { type: 'triangle8' as const },
+            envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 },
+          };
+
+    return new Tone.PolySynth({
+      maxPolyphony: 64,
+      voice: Tone.Synth,
+      options: voiceOptions,
+    }).toDestination();
+  }, [instrument]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const synth = createSynth();
+    synthRef.current = synth;
+
     return () => {
-      if (synthRef.current) {
-        synthRef.current.dispose();
+      if (synthRef.current === synth) {
+        synthRef.current = null;
       }
+      synth.dispose();
       if (Tone.Transport.state !== 'stopped') {
         Tone.Transport.stop();
       }
@@ -257,13 +503,22 @@ export function PianoRoll({
       scheduledEventsRef.current.forEach(id => Tone.Transport.clear(id));
       scheduledEventsRef.current = [];
     };
-  }, [bpm]);
+  }, [createSynth]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      Tone.Transport.bpm.value = bpm;
+      Tone.Transport.bpm.value = Math.floor(bpm);
     }
   }, [bpm]);
+
+  useEffect(() => {
+    const synth = synthRef.current;
+    if (!synth) {
+      return;
+    }
+    const gain = Math.max(volume / 100, 0.001);
+    synth.volume.value = Tone.gainToDb(gain);
+  }, [volume]);
 
   useEffect(() => {
     let animationFrameId: number | null = null;
@@ -468,6 +723,15 @@ export function PianoRoll({
     fileInputRef.current?.click();
   };
 
+  const handleVolumeChange = useCallback((value: number) => {
+    const clamped = Math.min(100, Math.max(0, Math.round(value)));
+    setVolume(clamped);
+  }, []);
+
+  const handleToggleInstrument = useCallback(() => {
+    setInstrument(prev => (prev === 'piano' ? 'guitar' : 'piano'));
+  }, []);
+
   const handleMidiFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -477,7 +741,7 @@ export function PianoRoll({
       const midi = new Midi(arrayBuffer);
 
       const newBpm = midi.header.tempos[0]?.bpm || 120;
-      setBpm(newBpm);
+      setBpm(Math.round(newBpm));
 
       const ppq = midi.header.ppq;
       const newNotes: Note[] = [];
@@ -695,19 +959,49 @@ export function PianoRoll({
   }, [melody, feedbackState, isGenerating]);
 
   const handleSendPositiveFeedback = () => {
-    if (!melody) return;
+    if (!melody) {
+      console.warn('[FEEDBACK] No melody to provide feedback for');
+      return;
+    }
+
+    // Sprawdź czy melody ma jakiekolwiek nuty
+    const hasNotes = 
+      (melody.melody?.length ?? 0) > 0 ||
+      (melody.chords?.length ?? 0) > 0 ||
+      (melody.bassline?.length ?? 0) > 0;
+
+    if (!hasNotes) {
+      console.warn('[FEEDBACK] Melody object exists but contains no notes');
+      toast({
+        variant: 'destructive',
+        title: 'Błąd',
+        description: 'Nie można wysłać opinii dla pustej melodii.',
+      });
+      return;
+    }
+
     setIsSubmittingFeedback(true);
 
     startSendPositive(async () => {
       try {
         const melodyData: GenerateFullCompositionOutput = {
-          melody: melody.melody,
-          chords: melody.chords,
-          bassline: melody.bassline,
+          melody: melody.melody ?? [],
+          chords: melody.chords ?? [],
+          bassline: melody.bassline ?? [],
         };
 
         const promptForFeedback = lastPrompt?.trim() || 'melody';
         const keyForFeedback = lastKey?.trim() || currentKey || 'unknown';
+
+        console.log('[FEEDBACK] Sending positive feedback:', {
+          prompt: promptForFeedback,
+          key: keyForFeedback,
+          noteCounts: {
+            melody: melodyData.melody.length,
+            chords: melodyData.chords.length,
+            bassline: melodyData.bassline.length,
+          },
+        });
 
         const result = await submitFeedbackAction({
           rating: 'up',
@@ -731,7 +1025,7 @@ export function PianoRoll({
           throw new Error(result.error || 'Unknown error');
         }
       } catch (error) {
-        console.error('Failed to submit positive feedback:', error);
+        console.error('[FEEDBACK] Failed to submit positive feedback:', error);
         toast({
           variant: 'destructive',
           title: 'Błąd',
@@ -748,19 +1042,47 @@ export function PianoRoll({
   };
 
   const handleSubmitNegativeFeedback = () => {
-    if (!melody) return;
+    if (!melody) {
+      console.warn('[FEEDBACK] No melody to provide feedback for');
+      return;
+    }
+
+    const hasNotes = 
+      (melody.melody?.length ?? 0) > 0 ||
+      (melody.chords?.length ?? 0) > 0 ||
+      (melody.bassline?.length ?? 0) > 0;
+
+    if (!hasNotes) {
+      toast({
+        variant: 'destructive',
+        title: 'Błąd',
+        description: 'Nie można wysłać opinii dla pustej melodii.',
+      });
+      return;
+    }
+
     setIsSubmittingFeedback(true);
 
     startSendNegative(async () => {
       try {
         const melodyData: GenerateFullCompositionOutput = {
-          melody: melody.melody,
-          chords: melody.chords,
-          bassline: melody.bassline,
+          melody: melody.melody ?? [],
+          chords: melody.chords ?? [],
+          bassline: melody.bassline ?? [],
         };
 
         const promptForFeedback = lastPrompt?.trim() || 'melody';
         const keyForFeedback = lastKey?.trim() || currentKey || 'unknown';
+
+        console.log('[FEEDBACK] Sending negative feedback:', {
+          reason: negativeReason,
+          notes: negativeNotes ? 'provided' : 'none',
+          noteCounts: {
+            melody: melodyData.melody.length,
+            chords: melodyData.chords.length,
+            bassline: melodyData.bassline.length,
+          },
+        });
 
         const result = await submitFeedbackAction({
           rating: 'down',
@@ -789,7 +1111,7 @@ export function PianoRoll({
           throw new Error(result.error || 'Unknown error');
         }
       } catch (error) {
-        console.error('Failed to submit negative feedback:', error);
+        console.error('[FEEDBACK] Failed to submit negative feedback:', error);
         toast({
           variant: 'destructive',
           title: 'Błąd',
@@ -813,29 +1135,83 @@ export function PianoRoll({
       tempoOverride?: number,
       intensifyDarkness?: boolean,
       gridResolutionOverride?: number,
+      fastMode?: boolean,
     ) => {
-      const promptToStore = prompt?.trim() || 'melody';
-      setLastPrompt(promptToStore);
-      const keyToStore = key?.trim() || currentKey || 'unknown';
-      setLastKey(keyToStore);
-      setLastChordProgression(chordProgression);
-      setLastIntensifyDarkness(Boolean(intensifyDarkness));
+      try {
+        if (isPlaying) {
+          resumeAfterGenerationRef.current = true;
+          Tone.Transport.stop();
+          setIsPlaying(false);
+        } else {
+          resumeAfterGenerationRef.current = false;
+        }
 
-      await onGenerateMelody(
-        prompt,
-        key,
-        useExample,
-        chordProgression,
-        youtubeUrl,
-        exampleMelody,
-        measuresOverride,
-        tempoOverride,
-        intensifyDarkness,
-        gridResolutionOverride,
-      );
+        const promptToStore = prompt?.trim() || 'melody';
+        setLastPrompt(promptToStore);
+        const keyToStore = key?.trim() || currentKey || 'unknown';
+        setLastKey(keyToStore);
+        setLastChordProgression(chordProgression);
+        setLastIntensifyDarkness(Boolean(intensifyDarkness));
+
+        const tempoFromPromptMatch = prompt.match(/(\d{2,3})\s*(?:bpm|beats?\s*per\s*minute)/i);
+        let resolvedTempo = tempoOverride ?? bpm;
+        if (tempoFromPromptMatch) {
+          const parsed = Number.parseInt(tempoFromPromptMatch[1], 10);
+          if (!Number.isNaN(parsed)) {
+            resolvedTempo = parsed;
+          }
+        }
+
+        const sanitizedTempo = Math.max(20, Math.min(400, Math.round(resolvedTempo)));
+
+        console.log('[PIANO_ROLL] Starting generation with params:', {
+          prompt: promptToStore.substring(0, 50) + '...',
+          key: keyToStore,
+          tempo: sanitizedTempo,
+          measures: measuresOverride,
+          intensifyDarkness,
+        });
+
+        await onGenerateMelody(
+          prompt,
+          key,
+          useExample,
+          chordProgression,
+          youtubeUrl,
+          exampleMelody,
+          measuresOverride,
+          sanitizedTempo,
+          intensifyDarkness,
+          gridResolutionOverride,
+          fastMode,
+        );
+
+        // WAŻNE: Resetuj feedback TYLKO jeśli generacja się powiodła
+        // (melody zostanie ustawiona w useEffect powyżej)
+        console.log('[PIANO_ROLL] Generation completed successfully');
+        setFeedbackState('idle');
+        setIsFeedbackDialogOpen(false);
+        setNegativeReason('quality');
+        setNegativeNotes('');
+      } catch (error) {
+        console.error('[PIANO_ROLL] Generation failed:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Błąd generacji',
+          description: error instanceof Error ? error.message : 'Nieznany błąd',
+        });
+        // NIE resetuj feedback state przy błędzie
+      }
     },
-    [currentKey, onGenerateMelody],
+    [currentKey, isPlaying, onGenerateMelody, bpm, toast],
   );
+
+  useEffect(() => {
+    if (!isGenerating && resumeAfterGenerationRef.current) {
+      resumeAfterGenerationRef.current = false;
+      handlePlayToggle();
+    }
+  }, [isGenerating]);
 
   const controlsPanel = (
     <ControlsPanel
@@ -904,6 +1280,10 @@ export function PianoRoll({
         onToggleGhost={toggleGhostExample}
         bpm={bpm}
         onBpmChange={setBpm}
+        volume={volume}
+        onVolumeChange={handleVolumeChange}
+        isGuitar={instrument === 'guitar'}
+        onToggleGuitar={handleToggleInstrument}
       />
       <div className="flex flex-1 flex-col lg:flex-row min-h-0">
         <div className="flex-1 min-h-0 min-w-0 grid grid-rows-[auto,1fr,auto] max-h-[calc(100vh-4.25rem)] sm:max-h-[calc(100vh-6.5rem)] pianoroll-landscape-grid">
@@ -966,8 +1346,24 @@ export function PianoRoll({
       </div>
 
       {isControlsPanelOpen ? (
-        <div className={floatingPanelClasses}>
+        <div 
+          className={floatingPanelClasses}
+          style={{
+            transform: `translate(${panelPosition.x}px, ${panelPosition.y}px)`,
+            height: `${panelHeight}px`,
+            maxHeight: `${panelHeight}px`,
+            transition: isResizing ? 'none' : 'transform 0.2s ease-out',
+          }}
+        >
           <div className="mobile-controls-surface">
+            <div 
+              className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 text-muted-foreground/60 cursor-grab active:cursor-grabbing p-2 -m-2"
+              style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+              onMouseDown={handlePanelMouseDown}
+              onTouchStart={handlePanelTouchStart}
+            >
+              <GripVertical className="h-4 w-4" />
+            </div>
             <div className="absolute top-2 right-2 z-10">
               <Button
                 variant="ghost"
@@ -979,8 +1375,21 @@ export function PianoRoll({
                 <span className="sr-only">Ukryj panel</span>
               </Button>
             </div>
-            <div className="mobile-controls-content px-4 pt-5 pb-5">
+            <div className="mobile-controls-content px-4 pt-5 pb-8 flex-1 overflow-y-auto">
               {controlsPanel}
+            </div>
+            
+            {/* Resize handle na dole */}
+            <div 
+              className={`absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center cursor-ns-resize transition-colors ${
+                isResizing ? 'bg-primary/20' : 'bg-black/10 hover:bg-black/20'
+              }`}
+              onMouseDown={handleResizeStart}
+              onTouchStart={handleResizeStart}
+            >
+              <div className={`w-8 h-1 rounded-full transition-colors ${
+                isResizing ? 'bg-primary/60' : 'bg-white/40'
+              }`}></div>
             </div>
           </div>
         </div>

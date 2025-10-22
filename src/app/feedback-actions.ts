@@ -24,6 +24,41 @@ interface SubmitFeedbackInput {
   melody: GenerateFullCompositionOutput;
 }
 
+type FewShotDatasetEntry = {
+  input: {
+    prompt: string;
+    key: string;
+    measures: number;
+    chordProgression: string;
+    tempo?: number;
+    gridResolution?: number;
+    intensifyDarkness?: boolean;
+  };
+  output: GenerateFullCompositionOutput;
+  metadata: {
+    signature: string;
+    rating: 'up' | 'down';
+    timestamp: string;
+    source: string;
+    aiGenerated: boolean;
+    [key: string]: unknown;
+  };
+};
+
+type FeedbackLogEntry = {
+  prompt: string;
+  key: string;
+  measures?: number;
+  tempo?: number;
+  gridResolution?: number;
+  chordProgression?: string;
+  intensifyDarkness?: boolean;
+  reason: 'quality' | 'prompt_mismatch' | 'other';
+  notes?: string;
+  signature: string;
+  timestamp: string;
+};
+
 async function ensureTrainingDataDir(): Promise<void> {
   try {
     await fs.mkdir(TRAINING_DATA_DIR, { recursive: true });
@@ -36,8 +71,9 @@ async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   try {
     const data = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(data) as T;
-  } catch (error: any) {
-    if (error?.code === 'ENOENT') {
+  } catch (error: unknown) {
+    const err = error as NodeJS.ErrnoException;
+    if (err?.code === 'ENOENT') {
       return fallback;
     }
     console.warn(`[FEEDBACK] Failed to read ${filePath}:`, error);
@@ -79,7 +115,7 @@ export async function submitFeedbackAction(input: SubmitFeedbackInput): Promise<
   const timestamp = new Date().toISOString();
 
   if (rating === 'up') {
-    const dataset = await readJsonFile<any[]>(FEW_SHOT_DATASET_PATH, []);
+    const dataset = await readJsonFile<FewShotDatasetEntry[]>(FEW_SHOT_DATASET_PATH, []);
 
     const alreadyExists = dataset.some(entry => {
       if (entry?.metadata?.signature) {
@@ -122,7 +158,7 @@ export async function submitFeedbackAction(input: SubmitFeedbackInput): Promise<
     return { ok: true };
   }
 
-  const feedbackLog = await readJsonFile<any[]>(FEEDBACK_LOG_PATH, []);
+  const feedbackLog = await readJsonFile<FeedbackLogEntry[]>(FEEDBACK_LOG_PATH, []);
 
   feedbackLog.unshift({
     prompt,

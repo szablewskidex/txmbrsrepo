@@ -2,10 +2,12 @@
 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Play, Pause, Download, Ghost, FileJson, Upload, Move } from 'lucide-react';
+import { Play, Pause, Download, Ghost, FileJson, Upload, Move, Sun, Moon, Monitor, Volume2, VolumeX, Guitar } from 'lucide-react';
 import React from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { useTheme, ThemeName } from '@/components/theme-provider';
+import { Slider } from '@/components/ui/slider';
 
 interface ToolbarProps {
   isPlaying: boolean;
@@ -18,13 +20,18 @@ interface ToolbarProps {
   onToggleGhost: () => void;
   bpm: number;
   onBpmChange: (bpm: number) => void;
+  volume: number;
+  onVolumeChange: (value: number) => void;
+  isGuitar: boolean;
+  onToggleGuitar: () => void;
 }
 
 export function Toolbar({ 
   isPlaying, onPlayToggle, onExportMidi, onDragMidiStart, onDragMidiEnd, onExportJson, onImportMidiClick, onToggleGhost,
-  bpm, onBpmChange
+  bpm, onBpmChange, volume, onVolumeChange, isGuitar, onToggleGuitar
 }: ToolbarProps) {
   const [bpmInput, setBpmInput] = React.useState<string>(() => (Number.isFinite(bpm) ? String(bpm) : ''));
+  const { theme, cycleTheme } = useTheme();
 
   React.useEffect(() => {
     const nextValue = Number.isFinite(bpm) ? String(bpm) : '';
@@ -43,6 +50,31 @@ export function Toolbar({
       }
     }
   };
+
+  const nextThemeLabel = React.useMemo(() => {
+    const themes: ThemeName[] = ['standard', 'dark', 'light'];
+    const index = themes.indexOf(theme);
+    const next = themes[(index + 1) % themes.length];
+    switch (next) {
+      case 'dark':
+        return 'Przełącz na tryb ciemny';
+      case 'light':
+        return 'Przełącz na tryb jasny';
+      default:
+        return 'Przełącz na tryb standardowy';
+    }
+  }, [theme]);
+
+  const currentThemeIcon = React.useMemo(() => {
+    switch (theme) {
+      case 'dark':
+        return <Moon className="h-5 w-5" />;
+      case 'light':
+        return <Sun className="h-5 w-5" />;
+      default:
+        return <Monitor className="h-5 w-5" />;
+    }
+  }, [theme]);
 
   return (
     <header className="flex items-center h-12 px-3 bg-card border-b shrink-0 sm:h-14 sm:px-4">
@@ -66,6 +98,27 @@ export function Toolbar({
                 inputMode="numeric"
             />
         </div>
+        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Button variant="ghost" size="icon" onClick={cycleTheme} title={nextThemeLabel} aria-label={nextThemeLabel}>
+          {currentThemeIcon}
+        </Button>
+        <Separator orientation="vertical" className="h-6 mx-2" />
+        <div className="hidden md:flex items-center gap-2 w-36">
+          <VolumeX className="h-4 w-4 text-muted-foreground" />
+          <Slider
+            value={[volume]}
+            min={0}
+            max={100}
+            step={1}
+            onValueChange={([val]) => onVolumeChange(val ?? 0)}
+            aria-label="Głośność"
+          />
+          <Volume2 className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+        <Button variant="ghost" size="icon" onClick={onToggleGuitar} title={isGuitar ? 'Użyj dźwięku pianina' : 'Użyj dźwięku gitary'}>
+          <Guitar className={`h-5 w-5 ${isGuitar ? 'text-primary' : ''}`} />
+        </Button>
         <Separator orientation="vertical" className="h-6 mx-2" />
         <Button variant="ghost" size="icon" onClick={onImportMidiClick} title="Importuj MIDI">
             <Upload className="h-5 w-5" />

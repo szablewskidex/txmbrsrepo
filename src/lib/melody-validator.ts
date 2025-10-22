@@ -1,4 +1,3 @@
-
 import type { MelodyNote } from '@/lib/schemas';
 
 // Skale muzyczne (w półtonach od prymy)
@@ -9,7 +8,7 @@ const SCALES = {
   melodicMinor: [0, 2, 3, 5, 7, 9, 11],
   dorian: [0, 2, 3, 5, 7, 9, 10],
   phrygian: [0, 1, 3, 5, 7, 8, 10],
-};
+} as const;
 
 const NOTE_MAP: Record<string, number> = {
   'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
@@ -21,63 +20,75 @@ const NOTE_MAP: Record<string, number> = {
  * Konwertuje nazwę nuty (np. "C4") na numer MIDI
  */
 function noteToMidi(note: string): number {
-  const match = note.match(/^([A-G][b#]?)(\d+)$/);
-  if (!match) return 60; // Domyślnie C4
+  const match = note.match(/^([A-G][b#]?)(-?\d+)$/);
+  if (!match) {
+    console.warn(`[VALIDATOR] Invalid note format: "${note}", defaulting to C4`);
+    return 60; // Domyślnie C4
+  }
   const [, noteName, octave] = match;
-  return (parseInt(octave) + 1) * 12 + NOTE_MAP[noteName];
+  const noteValue = NOTE_MAP[noteName];
+  if (noteValue === undefined) {
+    console.warn(`[VALIDATOR] Unknown note name: "${noteName}", defaulting to C`);
+    return 60;
+  }
+  return (parseInt(octave) + 1) * 12 + noteValue;
 }
 
 /**
  * Konwertuje numer MIDI na nazwę nuty
  */
 function midiToNote(midi: number): string {
-  const octave = Math.floor(midi / 12) - 1;
+  const clampedMidi = Math.max(0, Math.min(127, Math.round(midi)));
+  const octave = Math.floor(clampedMidi / 12) - 1;
   const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const noteName = noteNames[midi % 12];
+  const noteName = noteNames[clampedMidi % 12];
   return `${noteName}${octave}`;
 }
-
 
 /**
  * Koryguje nutę do najbliższej w skali
  */
 function snapToScale(noteName: string, key: string, scaleType: keyof typeof SCALES = 'minor'): string {
-    const originalMidi = noteToMidi(noteName);
-    const rootNoteName = key.split(' ')[0];
-    const rootMidiBase = NOTE_MAP[rootNoteName];
+  const originalMidi = noteToMidi(noteName);
+  const rootNoteName = key.split(' ')[0];
+  const rootMidiBase = NOTE_MAP[rootNoteName];
 
-    const noteInOctave = originalMidi % 12;
-    const scale = SCALES[scaleType];
+  if (rootMidiBase === undefined) {
+    console.warn(`[VALIDATOR] Unknown key: "${key}", returning original note`);
+    return noteName;
+  }
 
-    let closestNoteInScale = -1;
-    let minDistance = Infinity;
+  const noteInOctave = originalMidi % 12;
+  const scale = SCALES[scaleType];
 
-    // Find the closest scale degree in the chromatic circle
-    for (const interval of scale) {
-        const scaleNoteBase = (rootMidiBase + interval) % 12;
-        const distance = Math.min(
-            Math.abs(noteInOctave - scaleNoteBase),
-            12 - Math.abs(noteInOctave - scaleNoteBase)
-        );
-        if (distance < minDistance) {
-            minDistance = distance;
-            closestNoteInScale = scaleNoteBase;
-        }
+  let closestNoteInScale = -1;
+  let minDistance = Infinity;
+
+  // Find the closest scale degree in the chromatic circle
+  for (const interval of scale) {
+    const scaleNoteBase = (rootMidiBase + interval) % 12;
+    const distance = Math.min(
+      Math.abs(noteInOctave - scaleNoteBase),
+      12 - Math.abs(noteInOctave - scaleNoteBase)
+    );
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestNoteInScale = scaleNoteBase;
     }
+  }
 
-    let pitchCorrection = closestNoteInScale - noteInOctave;
-    // Adjust for circular distance
-    if (pitchCorrection > 6) {
-        pitchCorrection -= 12;
-    } else if (pitchCorrection < -6) {
-        pitchCorrection += 12;
-    }
-    
-    const correctedMidi = originalMidi + pitchCorrection;
+  let pitchCorrection = closestNoteInScale - noteInOctave;
+  // Adjust for circular distance
+  if (pitchCorrection > 6) {
+    pitchCorrection -= 12;
+  } else if (pitchCorrection < -6) {
+    pitchCorrection += 12;
+  }
 
-    return midiToNote(correctedMidi);
+  const correctedMidi = originalMidi + pitchCorrection;
+
+  return midiToNote(correctedMidi);
 }
-
 
 /**
  * Quantize - wyrównuje timing do najbliższej wartości siatki
@@ -114,9 +125,9 @@ export function validateAndCorrectMelody(
     correctToScale?: boolean;
     quantizeGrid?: number;
     humanize?: boolean;
-    maxInterval?: number; // maksymalny skok melodyczny w półtonach
+    maxInterval?: number;
     removeDuplicates?: boolean;
-    ensureMinNotes?: number; // NOWA OPCJA
+    ensureMinNotes?: number;
     allowChromatic?: boolean;
   } = {}
 ): MelodyNote[] {
@@ -125,18 +136,53 @@ export function validateAndCorrectMelody(
     correctToScale = true,
     quantizeGrid = 0.25,
     humanize: shouldHumanize = false,
-    maxInterval = 12, // maksymalnie oktawa
+    maxInterval = 12,
     removeDuplicates = true,
     ensureMinNotes = 0,
     allowChromatic = false,
   } = options;
 
-  if (!notes || notes.length === 0) {
-      return [];
+  // POPRAWKA 1: Lepsze sprawdzenie pustej tablicy
+  if (!Array.isArray(notes) || notes.length === 0) {
+    console.warn('[VALIDATOR] No notes to validate');
+    return [];
+  }
+
+  // POPRAWKA 2: Filtruj nieprawidłowe nuty PRZED przetwarzaniem
+  const validNotes = notes.filter(note => {
+    if (!note || typeof note !== 'object') {
+      console.warn('[VALIDATOR] Invalid note object:', note);
+      return false;
+    }
+    if (typeof note.start !== 'number' || typeof note.duration !== 'number') {
+      console.warn('[VALIDATOR] Note missing start/duration:', note);
+      return false;
+    }
+    if (!note.note || typeof note.note !== 'string') {
+      console.warn('[VALIDATOR] Note missing note name:', note);
+      return false;
+    }
+    // Sprawdź czy nuta ma prawidłowy format
+    if (!/^[A-G][b#]?-?\d+$/.test(note.note)) {
+      console.warn('[VALIDATOR] Invalid note format:', note.note);
+      return false;
+    }
+    // NOWE: Sprawdź zakres MIDI (21-108 to rozsądny zakres dla muzyki)
+    const midi = noteToMidi(note.note);
+    if (midi < 21 || midi > 108) {
+      console.warn('[VALIDATOR] Note out of reasonable range:', note.note, 'MIDI:', midi);
+      return false;
+    }
+    return true;
+  });
+
+  if (validNotes.length === 0) {
+    console.warn('[VALIDATOR] All notes filtered out as invalid');
+    return [];
   }
 
   const scaleType = key.includes('major') ? 'major' : allowChromatic ? 'harmonicMinor' : 'minor';
-  let processedNotes = [...notes];
+  let processedNotes = [...validNotes];
 
   // 1. Sortuj po czasie przed przetwarzaniem
   processedNotes.sort((a, b) => a.start - b.start);
@@ -155,6 +201,11 @@ export function validateAndCorrectMelody(
       };
     })
     .filter(note => note.duration > 0);
+
+  if (processedNotes.length === 0) {
+    console.warn('[VALIDATOR] All notes outside valid duration range');
+    return [];
+  }
 
   // 3. Quantize timing
   if (quantizeGrid > 0) {
@@ -192,7 +243,7 @@ export function validateAndCorrectMelody(
       const prevMidi = noteToMidi(processedNotes[i - 1].note);
       let currMidi = noteToMidi(processedNotes[i].note);
       const interval = Math.abs(currMidi - prevMidi);
-      
+
       if (interval > maxInterval) {
         // Przesuń nutę bliżej poprzedniej, zachowując kierunek
         const direction = Math.sign(currMidi - prevMidi);
@@ -208,41 +259,79 @@ export function validateAndCorrectMelody(
     const timeSlots = new Set<string>();
 
     for (const note of processedNotes) {
-        const startSlot = quantize(note.start, quantizeGrid > 0 ? quantizeGrid : 0.125);
-        const key = `${startSlot}:${note.note}`;
+      const startSlot = quantize(note.start, quantizeGrid > 0 ? quantizeGrid : 0.125);
+      const key = `${startSlot}:${note.note}`;
 
-        if (!timeSlots.has(key)) {
-            uniqueNotes.push(note);
-            timeSlots.add(key);
-        }
+      if (!timeSlots.has(key)) {
+        uniqueNotes.push(note);
+        timeSlots.add(key);
+      }
     }
     processedNotes = uniqueNotes;
   }
-  
-  // 7. Zapewnij minimalną liczbę nut (prosta strategia - duplikowanie)
+
+  // 7. POPRAWKA 3: Zapewnij minimalną liczbę nut (bardziej inteligentnie)
   if (ensureMinNotes > 0 && processedNotes.length > 0 && processedNotes.length < ensureMinNotes) {
-    const originalNotes = [...processedNotes];
-    while (processedNotes.length < ensureMinNotes) {
-      const noteToCopy = originalNotes[processedNotes.length % originalNotes.length];
-      const lastNote = processedNotes[processedNotes.length-1];
+    // POPRAWKA: Użyj processedNotes (po walidacji) zamiast originalNotes (przed walidacją)
+    const validatedNotes = [...processedNotes];
+    let attempts = 0;
+    const maxAttempts = ensureMinNotes * 2; // Zapobiegnij nieskończonej pętli
+
+    while (processedNotes.length < ensureMinNotes && attempts < maxAttempts) {
+      attempts++;
+      const noteToCopy = validatedNotes[processedNotes.length % validatedNotes.length];
+      const lastNote = processedNotes[processedNotes.length - 1];
       const newStart = lastNote.start + lastNote.duration;
+
       if (newStart + noteToCopy.duration <= maxDuration) {
-        processedNotes.push({ ...noteToCopy, start: newStart });
+        // Dodaj małą wariację do velocity dla różnorodności
+        const velocityVariation = Math.floor((Math.random() - 0.5) * 10);
+        processedNotes.push({
+          ...noteToCopy,
+          start: newStart,
+          velocity: Math.max(1, Math.min(127, noteToCopy.velocity + velocityVariation)),
+        });
       } else {
-        break; 
+        // Jeśli nie mieści się, spróbuj krótszą nutę
+        const shortenedDuration = Math.min(noteToCopy.duration, maxDuration - newStart);
+        if (shortenedDuration >= quantizeGrid) {
+          processedNotes.push({
+            ...noteToCopy,
+            start: newStart,
+            duration: shortenedDuration,
+          });
+        } else {
+          // Nie ma już miejsca
+          break;
+        }
       }
     }
-  }
 
+    if (attempts >= maxAttempts) {
+      console.warn('[VALIDATOR] Could not add enough notes to reach minimum');
+    }
+  }
 
   // 8. Humanizacja (opcjonalna)
   if (shouldHumanize) {
     processedNotes = processedNotes.map(note => humanize(note));
   }
 
-  // 9. Ostateczne sortowanie
+  // 9. POPRAWKA 4: Ostateczna walidacja przed zwrotem
+  processedNotes = processedNotes.filter(note => {
+    if (note.start < 0 || note.start >= maxDuration) return false;
+    if (note.duration <= 0) return false;
+    if (note.velocity < 1 || note.velocity > 127) {
+      // Napraw velocity zamiast odrzucać
+      note.velocity = Math.max(1, Math.min(127, note.velocity));
+    }
+    return true;
+  });
+
+  // 10. Ostateczne sortowanie
   processedNotes.sort((a, b) => a.start - b.start);
 
+  console.log(`[VALIDATOR] Validated: ${validNotes.length} -> ${processedNotes.length} notes`);
   return processedNotes;
 }
 
@@ -254,57 +343,65 @@ export function analyzeMelody(notes: MelodyNote[]): {
   maxInterval: number;
   rhythmicDensity: number;
   range: number;
-  score: number; // 0-100, wyższa = lepsza
+  score: number;
 } {
-  if (notes.length < 2) {
+  if (!Array.isArray(notes) || notes.length < 2) {
     return { avgInterval: 0, maxInterval: 0, rhythmicDensity: 0, range: 0, score: 0 };
   }
 
   // Sort notes by start time for correct interval calculation
-  const sortedNotes = [...notes].sort((a,b) => a.start - b.start);
-  const midiNotes = sortedNotes.map(n => noteToMidi(n.note));
-  
+  const sortedNotes = [...notes].sort((a, b) => a.start - b.start);
+
+  // POPRAWKA 5: Obsłuż nieprawidłowe nuty
+  let midiNotes: number[];
+  try {
+    midiNotes = sortedNotes.map(n => noteToMidi(n.note));
+  } catch (error) {
+    console.error('[VALIDATOR] Error converting notes to MIDI:', error);
+    return { avgInterval: 0, maxInterval: 0, rhythmicDensity: 0, range: 0, score: 0 };
+  }
+
   // Oblicz średni i maksymalny interwał
   let totalInterval = 0;
   let maxInterval = 0;
-  
+
   for (let i = 1; i < midiNotes.length; i++) {
     const interval = Math.abs(midiNotes[i] - midiNotes[i - 1]);
     totalInterval += interval;
     maxInterval = Math.max(maxInterval, interval);
   }
-  
+
   const avgInterval = totalInterval / (midiNotes.length - 1);
-  
+
   // Zakres melodyczny
   const range = Math.max(...midiNotes) - Math.min(...midiNotes);
-  
+
   // Gęstość rytmiczna (ile nut na beat)
   const duration = Math.max(...sortedNotes.map(n => n.start + n.duration));
   const rhythmicDensity = duration > 0 ? sortedNotes.length / duration : 0;
-  
+
   // Scoring (proste heurystyki)
   let score = 50;
-  
+
   // Dobry średni interwał: 2-5 półtonów
   if (avgInterval >= 2 && avgInterval <= 5) score += 15;
   else if (avgInterval < 2 && avgInterval > 0) score -= 10; // zbyt monotonna
   else if (avgInterval > 5) score -= 5; // zbyt skaczaca
-  
+
   // Dobry zakres: 1-2 oktawy
   if (range >= 12 && range <= 24) score += 15;
   else if (range < 12 && range > 0) score -= 10;
-  
+
   // Dobra gęstość: 1-4 nuty na beat
   if (rhythmicDensity >= 1 && rhythmicDensity <= 4) score += 15;
-  
+
   // Kara za zbyt duże skoki
   if (maxInterval > 12) score -= 10;
 
   // Kara za brak nut
   if (notes.length < 5) score -= 20;
-  
+
   score = Math.max(0, Math.min(100, score));
-  
+
   return { avgInterval, maxInterval, rhythmicDensity, range, score };
 }
