@@ -1,0 +1,89 @@
+/* iPhone 13 mini specific optimizations */
+
+/* Portrait mode - 375x812 logical pixels */
+@media screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) {
+  /* Ensure perfect fit */
+  html, body, #__next, main {
+    width: 375px !important;
+    height: 812px !important;
+    max-width: 375px !important;
+    max-height: 812px !important;
+    min-width: 375px !important;
+    min-height: 812px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+  
+  /* Adjust UI elements for smaller screen */
+  .mobile-controls-container {
+    width: min(85vw, 16rem) !important;
+    right: min(1.5rem, max(0.5rem, 1.5vw)) !important;
+  }
+  
+  /* Smaller toolbar for iPhone 13 mini */
+  .toolbar-container {
+    padding: 0.5rem !important;
+  }
+  
+  /* Adjust piano roll grid for better visibility */
+  .piano-roll-grid {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* Landscape mode - 812x375 logical pixels */
+@media screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape) {
+  /* Ensure perfect fit in landscape */
+  html, body, #__next, main {
+    width: 812px !important;
+    height: 375px !important;
+    max-width: 812px !important;
+    max-height: 375px !important;
+    min-width: 812px !important;
+    min-height: 375px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+  
+  /* Adjust controls for landscape */
+  .mobile-controls-container {
+    width: clamp(12rem, 28vw, 16rem) !important;
+    right: clamp(0.5rem, 4vw, 2rem) !important;
+    top: calc(env(safe-area-inset-top, 0px) + 40px) !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 40px) !important;
+  }
+  
+  /* Compact toolbar for landscape */
+  .toolbar-container {
+    padding: 0.25rem 0.5rem !important;
+    height: auto !important;
+  }
+  
+  /* Smaller piano keys in landscape */
+  .piano-key {
+    font-size: 0.7rem !important;
+  }
+}
+
+/* PWA mode specific adjustments for iPhone 13 mini */
+@media all and (display-mode: standalone) and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) {
+  /* Remove any safe area padding in PWA mode */
+  html {
+    padding: 0 !important;
+  }
+  
+  /* Ensure full coverage */
+  body, #__next, main {
+    width: 100vw !important;
+    height: 100vh !important;
+    height: -webkit-fill-available !important;
+  }
+}

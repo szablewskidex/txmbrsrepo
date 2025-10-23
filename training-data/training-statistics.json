@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2025-10-23T00:42:26.867Z",
+  "summary": {
+    "totalMidiFiles": 69,
+    "totalPatternsFound": 57,
+    "uniquePatterns": 57,
+    "highQualityPatterns": 27,
+    "validTrainingExamples": 27,
+    "duplicatesRemoved": 0,
+    "lowQualityFiltered": 30
+  },
+  "averageMetrics": {
+    "avgInterval": 9.17,
+    "melodicRange": 34.93,
+    "rhythmicVariety": 23,
+    "notesDensity": 8.2
+  },
+  "distributions": {
+    "styles": {
+      "melodic": 7,
+      "harmonic": 20
+    },
+    "instruments": {
+      "unknown": 22,
+      "piano": 4,
+      "guitar": 1
+    },
+    "keys": {
+      "C major": 4,
+      "F# minor": 3,
+      "A# minor": 1,
+      "E minor": 1,
+      "C minor": 2,
+      "A minor": 3,
+      "D minor": 1,
+      "G major": 1,
+      "D# minor": 2,
+      "A major": 1,
+      "F minor": 4,
+      "F major": 1,
+      "B major": 1,
+      "D# major": 1,
+      "F# major": 1
+    },
+    "tempoRanges": {
+      "slow": 1,
+      "medium": 14,
+      "fast": 12
+    }
+  },
+  "qualityThresholds": {
+    "MIN_NOTES_PER_PATTERN": 4,
+    "MAX_BEATS_PER_PATTERN": 32,
+    "MIN_KEY_CONFIDENCE": 0.25,
+    "SIMILARITY_THRESHOLD": 0.75
+  }
+}

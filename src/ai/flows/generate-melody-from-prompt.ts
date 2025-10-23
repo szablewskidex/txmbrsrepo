@@ -34,6 +34,7 @@ import {
 } from '../utils/few-shot-learning';
 import { applyGuitarStrum } from '../utils/guitar-effects';
 import { loadNegativeFeedbackSignatures, createCompositionSignature } from '../utils/negative-feedback';
+import { logGenerationMetrics } from '../../lib/analytics';
 import {
   buildCacheKey,
   getCachedMelody,
@@ -108,6 +109,8 @@ const InternalPromptInputSchema = z.object({
   includeBassline: z.boolean(),
   instrument: z.string().optional(),
   tempo: z.number().int().min(20).max(400).optional(),
+  slowTempo: z.boolean().optional(),
+  fastTempo: z.boolean().optional(),
 });
 
 // Fast mode prompt - drastycznie krótszy
@@ -130,12 +133,16 @@ const generateMelodyPrompt = ai.definePrompt({
   name: 'generateFullCompositionPrompt',
   input: { schema: InternalPromptInputSchema },
   output: { schema: GenerateFullCompositionOutputSchema },
-  prompt: `You are an expert music composer and theorist specializing in modern production.
+  prompt: `You are an expert music composer and theorist.
 
-**LAYERS:** Generate only the layers marked ✓ below, return empty arrays for ✗.
-{{#if includeMelody}}✓ Melody{{else}}✗ Melody{{/if}}
-{{#if includeChords}} ✓ Chords{{else}} ✗ Chords{{/if}}
-{{#if includeBassline}} ✓ Bassline{{else}} ✗ Bassline{{/if}}
+**CRITICAL: QUALITY OVER QUANTITY**
+Generate FEWER, BETTER notes rather than filling every beat.
+Leave space for breathing room and dynamics.
+
+**LAYERS:** Generate only the layers marked ✓ below:
+{{#if includeMelody}}✓ Melody{{else}}✗ Melody (return []){{/if}}
+{{#if includeChords}}✓ Chords{{else}}✗ Chords (return []){{/if}}
+{{#if includeBassline}}✓ Bassline{{else}}✗ Bassline (return []){{/if}}
 
 {{#if instrument}}Primary instrument focus: {{{instrument}}} (keep range/playability idiomatic).{{/if}}
 
@@ -146,9 +153,24 @@ const generateMelodyPrompt = ai.definePrompt({
 - Follow chord progression: {{{chordProgression}}}
 
 {{#if tempo}}
-Tempo: {{{tempo}}} BPM. Groove must feel natural at this speed (slow = longer notes, fast = denser syncopation).
+**Tempo: {{tempo}} BPM**
+{{#if slowTempo}}
+SLOW tempo! Use:
+- Longer note durations (1-4 beats)
+- Sparse rhythm (4-8 notes per 4 bars)
+- Sustained chords (whole notes)
+{{else if fastTempo}}
+FAST tempo! Use:
+- Shorter durations (0.25-1 beat)
+- Dense rhythm (16-32 notes per 4 bars)
+- Quick chord changes
 {{else}}
-Assume medium 120 BPM feel.
+MEDIUM tempo! Use:
+- Mixed durations (0.5-2 beats)
+- Moderate density (10-20 notes per 4 bars)
+{{/if}}
+{{else}}
+Assume medium 120 BPM.
 {{/if}}
 
 {{#if includeBassline}}
@@ -170,13 +192,21 @@ Assume medium 120 BPM feel.
 {{/if}}
 
 {{#if includeMelody}}
-**Melody STRICT RULES:**
-- Range: C4-C6 (MIDI 60-84) ONLY
-- Count: 24-48 notes for {{{measures}}} bars (3-6 per bar)
-- Duration: mix quarter/eighth/16th notes
-- Motion: stepwise (1-2 semitones), occasional leaps ≤ octave
-- Phrasing: add short rests
-- Velocity: 80-110 (expressive)
+**Melody Rules:**
+- Range: C4-C6
+- Rhythm: Mix quarter, eighth, occasional 16th
+- Motion: MOSTLY stepwise (1-2 semitones)
+- Leaps: Max 1 octave, RARE
+- Phrasing: Add short rests (0.5-1 beat gaps)
+- Velocity: 70-100 (dynamic range)
+- Maximum 24 notes per 4 bars
+
+IMPORTANT MELODY TIPS:
+1. Start strong (on beat 1)
+2. Create a memorable hook (repeat a pattern)
+3. Build to a climax (highest note around 75% through)
+4. End resolved (land on tonic or dominant)
+5. DON'T fill every beat - silence is musical!
 {{/if}}
 
 Primary progression: {{{chordProgression}}}
@@ -252,6 +282,7 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
     fastMode,
   }) => {
     console.log('[MELODY_GEN] === NEW REQUEST ===');
+  const generationStartTime = Date.now();
 
     const measures = requestedMeasures ?? 8;
     const totalBeats = measures * 4;
@@ -312,6 +343,7 @@ const generateMelodyFromPromptFlow = ai.defineFlow(
           includeChords,
           includeBassline,
           fastMode,
+          generationStartTime,
         });
       } finally {
         releaseMelodySlot();
@@ -353,6 +385,7 @@ async function generateComposition(params: {
   includeChords: boolean;
   includeBassline: boolean;
   fastMode?: boolean;
+  generationStartTime: number;
 }): Promise<GenerateFullCompositionOutput> {
   const {
     prompt,
@@ -368,6 +401,7 @@ async function generateComposition(params: {
     includeChords,
     includeBassline,
     fastMode,
+    generationStartTime,
   } = params;
 
   let chordProgression = providedChordProgression;
@@ -472,6 +506,8 @@ async function generateComposition(params: {
       includeBassline,
       instrument,
       tempo: resolvedTempo ?? requestedTempo ?? promptTempo ?? undefined,
+      slowTempo: (resolvedTempo ?? requestedTempo ?? promptTempo ?? 120) < 90,
+      fastTempo: (resolvedTempo ?? requestedTempo ?? promptTempo ?? 120) > 140,
     };
 
     // Log request size
@@ -587,65 +623,10 @@ async function generateComposition(params: {
       const isBusy = /busy|dense|fast|rapid|many.notes/i.test(prompt);
 
       // PRIORYTET: fastMode > busy > complex > minimalist > default
-      let maxNotesPerBar;
-      if (fastMode) {
-        maxNotesPerBar = { melody: 3, chords: 2, bassline: 1 };  // Fast mode: umiarkowanie (więcej tolerancji)
-      } else if (isBusy) {
-        maxNotesPerBar = { melody: 6, chords: 4, bassline: 3 };  // Busy: dużo nut
-      } else if (isComplex) {
-        maxNotesPerBar = { melody: 4, chords: 4, bassline: 2 };  // Complex: średnio dużo
-      } else if (isMinimalist) {
-        maxNotesPerBar = { melody: 2, chords: 2, bassline: 1 };  // Hip-hop/trap: minimalistyczne
-      } else {
-        maxNotesPerBar = { melody: 3, chords: 3, bassline: 2 };  // Default: umiarkowane
-      }
-      const maxNotes = {
-        melody: maxNotesPerBar.melody * measures,
-        chords: maxNotesPerBar.chords * measures,
-        bassline: maxNotesPerBar.bassline * measures,
-      };
 
-      let countIssues: string[] = [];
+
       const style = isMinimalist ? 'minimalist' : isBusy ? 'busy' : isComplex ? 'complex' : 'default';
-      console.log(`[MELODY_GEN] Style: ${style} | Note counts: melody=${outputMelody.length}/${maxNotes.melody}, chords=${outputChords.length}/${maxNotes.chords}, bassline=${outputBassline.length}/${maxNotes.bassline}`);
-
-      if (includeMelody && outputMelody.length > maxNotes.melody) {
-        countIssues.push(`Melody has ${outputMelody.length} notes, max ${maxNotes.melody} (${maxNotesPerBar.melody}/bar)`);
-      }
-      if (includeChords && outputChords.length > maxNotes.chords) {
-        countIssues.push(`Chords has ${outputChords.length} notes, max ${maxNotes.chords} (${maxNotesPerBar.chords}/bar)`);
-      }
-      if (includeBassline && outputBassline.length > maxNotes.bassline) {
-        countIssues.push(`Bassline has ${outputBassline.length} notes, max ${maxNotes.bassline} (${maxNotesPerBar.bassline}/bar)`);
-      }
-
-      if (countIssues.length > 0) {
-        if (fastMode) {
-          // Fast mode: przytnij nuty zamiast retry
-          console.log(`[MELODY_GEN] Fast mode: trimming excess notes instead of retry`);
-          if (outputMelody.length > maxNotes.melody) {
-            outputMelody.splice(maxNotes.melody);
-            console.log(`[MELODY_GEN] Trimmed melody to ${outputMelody.length} notes`);
-          }
-          if (outputChords.length > maxNotes.chords) {
-            outputChords.splice(maxNotes.chords);
-            console.log(`[MELODY_GEN] Trimmed chords to ${outputChords.length} notes`);
-          }
-          if (outputBassline.length > maxNotes.bassline) {
-            outputBassline.splice(maxNotes.bassline);
-            console.log(`[MELODY_GEN] Trimmed bassline to ${outputBassline.length} notes`);
-          }
-          // Kontynuuj z przyciętymi nutami
-        } else {
-          // Normal mode: retry jak wcześniej
-          console.warn(`[MELODY_GEN] Attempt ${i + 1}: Too many notes:`, countIssues);
-          feedback = `TOO MANY NOTES: ${countIssues.join('. ')}. Generate FEWER notes with better spacing.`;
-          if (i < attemptsAllowed - 1) {
-            await sleep(RETRY_BASE_DELAY_MS * 2 ** i + Math.floor(Math.random() * 250));
-          }
-          continue;
-        }
-      }
+      console.log(`[MELODY_GEN] Style: ${style} | Note counts: melody=${outputMelody.length}, chords=${outputChords.length}, bassline=${outputBassline.length}`);
 
       const estimatedTokens = Math.ceil(JSON.stringify(outputWithTempo).length / 4);
       const shouldScore = includeMelody;
@@ -709,7 +690,21 @@ async function generateComposition(params: {
   }
 
   if (!bestOutput) {
-    throw new Error('AI failed to generate any valid composition after multiple retries.');
+    const errorDetails = `Generacja nie powiodła się po ${attemptsAllowed} próbach.
+
+Możliwe przyczyny:
+- Zbyt złożony prompt (spróbuj uprościć)
+- Konflikt z progresją akordów (zmień tonację)
+- Limit API osiągnięty (poczekaj 5 minut)
+- Problemy z siecią (sprawdź połączenie)
+
+Spróbuj:
+- Uprosić prompt (np. "dark melody" zamiast długiego opisu)
+- Zmienić tonację na popularniejszą (A minor, C major)
+- Użyć Fast Mode (⚡ Szybkie generowanie)
+- Poczekać chwilę i spróbować ponownie`;
+    
+    throw new Error(errorDetails);
   }
 
   console.log('[MELODY_GEN] Validating and correcting output...');
@@ -727,29 +722,33 @@ async function generateComposition(params: {
   let validatedOutput: GenerateFullCompositionOutput;
 
   try {
+    // KLUCZOWA ZMIANA: Użyj 'preserve' zamiast 'strict'
     validatedOutput = {
       melody: safeValidateLayer(includeMelody, normalizedBestOutput.melody, key, {
         maxDuration: totalBeats,
         quantizeGrid: gridResolution,
-        correctToScale: !allowChromatic,
-        maxInterval: allowChromatic ? 18 : 12,
-        ensureMinNotes: 12,
-        allowChromatic,
+        correctToScale: false, // NIE poprawiaj nut!
+        maxInterval: 999, // NIE ograniczaj skoków!
+        ensureMinNotes: 0, // NIE dodawaj sztucznych nut!
+        allowChromatic: true,
+        validateMode: 'preserve', // <-- NOWE!
       }),
       chords: safeValidateLayer(includeChords, normalizedBestOutput.chords, key, {
         maxDuration: totalBeats,
         quantizeGrid: gridResolution * 2,
-        correctToScale: !(mood === 'dark' || useIntensify),
-        allowChromatic,
-        ensureMinNotes: 8,
+        correctToScale: false,
+        allowChromatic: true,
+        ensureMinNotes: 0,
+        validateMode: 'preserve', // <-- NOWE!
       }),
       bassline: safeValidateLayer(includeBassline, normalizedBestOutput.bassline, key, {
         maxDuration: totalBeats,
         quantizeGrid: gridResolution * 4,
-        correctToScale: !(mood === 'dark' || useIntensify),
-        allowChromatic,
-        maxInterval: allowChromatic ? 19 : 12,
-        ensureMinNotes: 6,
+        correctToScale: false,
+        allowChromatic: true,
+        maxInterval: 999,
+        ensureMinNotes: 0,
+        validateMode: 'preserve', // <-- NOWE!
       }),
     };
   } catch (error) {
@@ -770,6 +769,20 @@ async function generateComposition(params: {
   }
 
   console.log('[MELODY_GEN] ✓ Generation complete');
+  
+  // Log analytics
+  logGenerationMetrics(
+    generationStartTime,
+    attemptsAllowed,
+    bestScore,
+    0, // tokenUsage - will be updated by rate limiter
+    false, // cacheHit - we know it's false since we generated
+    fastMode || false,
+    key,
+    prompt,
+    true // success
+  );
+  
   return validatedOutput;
 }
 

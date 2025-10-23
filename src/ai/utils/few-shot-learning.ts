@@ -33,7 +33,7 @@ export interface FewShotContext {
   keywords?: string[];
 }
 
-const MAX_FEW_SHOT_EXAMPLES = 0; // TYMCZASOWO WYŁĄCZONE - training dataset ma złe przykłady
+const MAX_FEW_SHOT_EXAMPLES = 3; // WŁĄCZONE - używamy nowego, lepszego datasetu
 let cachedFewShotDataset: TrainingExample[] | null = null;
 let fewShotDatasetMtime: number | null = null;
 const fewShotPromptCache = new Map<string, string | null>();

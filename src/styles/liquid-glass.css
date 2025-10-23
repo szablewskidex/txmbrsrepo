@@ -1,0 +1,172 @@
+/* Liquid Glass UI Theme - Only active when theme-liquid-glass is set */
+
+/* iOS Safari black bars styling for liquid glass theme */
+.theme-liquid-glass,
+.theme-liquid-glass html,
+.theme-liquid-glass body {
+  background: linear-gradient(135deg, 
+    rgba(8, 8, 10, 1) 0%, 
+    rgba(10, 10, 12, 1) 25%,
+    rgba(12, 12, 15, 1) 50%,
+    rgba(10, 10, 12, 1) 75%,
+    rgba(8, 8, 10, 1) 100%) !important;
+  background-color: rgb(8, 8, 10) !important;
+}
+
+/* Complete liquid glass theme variables - pure neutral grays, no green tint */
+.theme-liquid-glass {
+  --background: 0 0% 3% !important;
+  --foreground: 0 0% 92% !important;
+  --card: 0 0% 4% !important;
+  --card-foreground: 0 0% 96% !important;
+  --popover: 0 0% 4% !important;
+  --popover-foreground: 0 0% 96% !important;
+  --primary: 0 0% 96% !important;
+  --primary-foreground: 0 0% 10% !important;
+  --secondary: 0 0% 12% !important;
+  --secondary-foreground: 0 0% 88% !important;
+  --muted: 0 0% 10% !important;
+  --muted-foreground: 0 0% 70% !important;
+  --accent: 0 0% 28% !important;
+  --accent-foreground: 0 0% 92% !important;
+  --destructive: 0 70% 46% !important;
+  --destructive-foreground: 0 0% 96% !important;
+  --border: 0 0% 18% !important;
+  --input: 0 0% 18% !important;
+  --ring: 0 0% 60% !important;
+}
+
+/* Force dark background on all main containers EXCEPT piano-grid */
+.theme-liquid-glass body,
+.theme-liquid-glass #__next,
+.theme-liquid-glass main,
+.theme-liquid-glass .bg-background:not(.piano-grid) {
+  background: rgba(8, 8, 10, 1) !important;
+  background-color: rgba(8, 8, 10, 1) !important;
+}
+
+/* Piano grid needs transparent background to show grid lines */
+.theme-liquid-glass .piano-grid.bg-background {
+  background-color: rgba(8, 8, 10, 1) !important;
+  /* backgroundImage is set by component - don't override it */
+}
+
+/* Force neutral card backgrounds EXCEPT event-editor-panel */
+.theme-liquid-glass .bg-card:not(.event-editor-panel) {
+  background: rgba(10, 10, 12, 1) !important;
+  background-color: rgba(10, 10, 12, 1) !important;
+}
+
+/* Enhanced Windows 11 Acrylic Toolbar Effect */
+.theme-liquid-glass .liquid-glass-toolbar {
+  background: rgba(12, 12, 15, 0.85);
+  backdrop-filter: blur(40px) saturate(2.0) brightness(1.1);
+  -webkit-backdrop-filter: blur(40px) saturate(2.0) brightness(1.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+/* Piano keys styling */
+.theme-liquid-glass .liquid-glass-piano {
+  background: rgba(10, 10, 12, 1) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+/* Piano keys container - force neutral background */
+.theme-liquid-glass .w-20.bg-card {
+  background: rgba(10, 10, 12, 1) !important;
+  background-color: rgba(10, 10, 12, 1) !important;
+}
+
+
+
+/* Transparent panels in liquid glass */
+.theme-liquid-glass .liquid-glass-panel {
+  background: rgba(12, 12, 15, 0.4) !important;
+  backdrop-filter: blur(40px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(1.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Event Editor transparent in liquid glass - ONLY for liquid glass theme */
+.theme-liquid-glass .event-editor-panel {
+  background: rgba(12, 12, 15, 0.35) !important;
+  backdrop-filter: blur(50px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(50px) saturate(1.6) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Make grid lines MUCH more visible in liquid glass */
+.theme-liquid-glass {
+  --border: 0 0% 70% !important;
+}
+
+/* Force bright grid lines in liquid glass */
+.theme-liquid-glass .piano-grid {
+  background-image: 
+    linear-gradient(to right, rgba(200, 200, 200, 0.4) 2px, transparent 2px),
+    linear-gradient(to right, rgba(150, 150, 150, 0.25) 1px, transparent 1px),
+    linear-gradient(to right, rgba(100, 100, 100, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(180, 180, 180, 0.3) 1px, transparent 1px) !important;
+}
+
+/* Make notes more visible in liquid glass */
+.theme-liquid-glass .liquid-glass-note {
+  opacity: 1 !important;
+  filter: brightness(1.2) !important;
+}
+
+/* Fix sliders visibility in liquid glass */
+.theme-liquid-glass input[type="range"] {
+  z-index: 10 !important;
+  position: relative !important;
+}
+
+.theme-liquid-glass .liquid-glass-slider {
+  z-index: 10 !important;
+  position: relative !important;
+}
+
+.theme-liquid-glass .liquid-glass-slider * {
+  z-index: 10 !important;
+}
+
+/* Mobile specific styling */
+@media screen and (max-width: 768px) {
+  .theme-liquid-glass html,
+  .theme-liquid-glass body,
+  .theme-liquid-glass #__next,
+  .theme-liquid-glass main {
+    background: linear-gradient(135deg, 
+      rgba(8, 8, 10, 1) 0%, 
+      rgba(10, 10, 12, 1) 25%,
+      rgba(12, 12, 15, 1) 50%,
+      rgba(10, 10, 12, 1) 75%,
+      rgba(8, 8, 10, 1) 100%) !important;
+    background-attachment: fixed !important;
+  }
+}
+
+/* Landscape mode specific styling */
+@media screen and (orientation: landscape) and (max-width: 1024px) {
+  .theme-liquid-glass html,
+  .theme-liquid-glass body,
+  .theme-liquid-glass #__next,
+  .theme-liquid-glass main {
+    background: linear-gradient(90deg, 
+      rgba(8, 8, 10, 1) 0%, 
+      rgba(10, 10, 12, 1) 20%,
+      rgba(12, 12, 15, 1) 50%,
+      rgba(10, 10, 12, 1) 80%,
+      rgba(8, 8, 10, 1) 100%) !important;
+    background-attachment: fixed !important;
+  }
+}

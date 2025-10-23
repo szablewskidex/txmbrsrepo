@@ -24,8 +24,8 @@ export function NoteItem({ note, cellPx, verticalZoom, isSelected, onMouseDown }
   return (
     <div
       className={cn(
-        "absolute flex items-center rounded-sm transition-all duration-100 ease-out cursor-grab active:cursor-grabbing bg-primary",
-        isSelected && "bg-sky-400/90 text-sky-950"
+        "absolute flex items-center cursor-grab active:cursor-grabbing liquid-glass-note",
+        isSelected && "selected"
       )}
       style={{
         left: note.start * cellPx,
@@ -33,7 +33,10 @@ export function NoteItem({ note, cellPx, verticalZoom, isSelected, onMouseDown }
         width: noteWidth,
         height: noteHeight,
         boxShadow,
+        background: isSelected ? 'hsl(var(--accent))' : 'hsl(var(--primary))',
+        borderRadius: '4px',
       }}
+      title={`Note: ${note.start.toFixed(3)} * ${cellPx} = ${(note.start * cellPx).toFixed(1)}px`}
       onMouseDown={(e) => onMouseDown(e, note.id, 'move')}
       onClick={(e) => e.stopPropagation()}
     >

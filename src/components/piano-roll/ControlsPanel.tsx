@@ -54,6 +54,8 @@ interface ControlsPanelProps {
   bpm: number;
   gridResolution: number;
   setGridResolution: (value: number) => void;
+  snapToGrid: boolean;
+  setSnapToGrid: (value: boolean) => void;
 }
 
 export function ControlsPanel({
@@ -81,6 +83,8 @@ export function ControlsPanel({
   bpm,
   gridResolution,
   setGridResolution,
+  snapToGrid,
+  setSnapToGrid,
 }: ControlsPanelProps) {
   const [prompt, setPrompt] = useState('dark trap melody');
   const [useExample, setUseExample] = useState(true);
@@ -142,27 +146,27 @@ export function ControlsPanel({
 
       <TabsContent value="grid" className="mt-3">
         <div className="flex flex-col gap-3">
-          <Card>
+          <Card className="liquid-glass-panel">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Ustawienia siatki</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 px-3 pb-3">
               <div className="space-y-1.5">
                 <Label htmlFor="measures">Takty: {measures}</Label>
-                <Slider id="measures" value={[measures]} onValueChange={([v]) => setMeasures(v)} min={4} max={64} step={4} />
+                <Slider id="measures" className="liquid-glass-slider" value={[measures]} onValueChange={([v]) => setMeasures(v)} min={4} max={64} step={4} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="h-zoom">Zoom poziomy</Label>
-                <Slider id="h-zoom" value={[cellPx]} onValueChange={([v]) => setCellPx(v)} min={10} max={100} step={1} />
+                <Slider id="h-zoom" className="liquid-glass-slider" value={[cellPx]} onValueChange={([v]) => setCellPx(v)} min={10} max={100} step={1} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="v-zoom">Zoom pionowy</Label>
-                <Slider id="v-zoom" value={[verticalZoom]} onValueChange={([v]) => setVerticalZoom(v)} min={0.5} max={2.5} step={0.1} />
+                <Slider id="v-zoom" className="liquid-glass-slider" value={[verticalZoom]} onValueChange={([v]) => setVerticalZoom(v)} min={0.5} max={2.5} step={0.1} />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="liquid-glass-panel">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Kwantyzacja</CardTitle>
               <CardDescription className="text-xs">Dokładność przyciągania nut do siatki.</CardDescription>
@@ -189,11 +193,27 @@ export function ControlsPanel({
                   Mniejsze wartości = dokładniejsza siatka (więcej linii)
                 </p>
               </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="snap-to-grid"
+                  checked={snapToGrid}
+                  onChange={(e) => setSnapToGrid(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="snap-to-grid" className="text-sm">
+                  Snap to Grid
+                </Label>
+              </div>
+              <p className="text-[0.68rem] text-muted-foreground">
+                Automatycznie przyciąga nuty do najbliższej linii siatki
+              </p>
             </CardContent>
           </Card>
 
           {selectedNote ? (
-            <Card>
+            <Card className="liquid-glass-panel">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">
                   {selectedNotes.length > 1 ? `Zaznaczone nuty: ${selectedNotes.length}` : 'Zaznaczona nuta'}
@@ -210,10 +230,10 @@ export function ControlsPanel({
                     {indexToNote(selectedNote.pitch)} — długość {selectedNote.duration.toFixed(2)}
                   </p>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => onUpdateNote(selectedNote.id, { duration: Math.max(0.1, selectedNote.duration * 0.5) })}>
+                    <Button variant="outline" size="sm" className="liquid-glass-button" onClick={() => onUpdateNote(selectedNote.id, { duration: Math.max(0.1, selectedNote.duration * 0.5) })}>
                       Skróć x0.5
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => onUpdateNote(selectedNote.id, { duration: selectedNote.duration * 2 })}>
+                    <Button variant="outline" size="sm" className="liquid-glass-button" onClick={() => onUpdateNote(selectedNote.id, { duration: selectedNote.duration * 2 })}>
                       Wydłuż x2
                     </Button>
                   </div>
@@ -237,7 +257,7 @@ export function ControlsPanel({
       </TabsContent>
 
       <TabsContent value="generate" className="mt-3">
-        <Card>
+        <Card className="liquid-glass-panel">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Generator AI</CardTitle>
             <CardDescription className="text-xs">Wygeneruj melodię z opisu tekstowego lub linku YouTube.</CardDescription>
@@ -329,7 +349,7 @@ export function ControlsPanel({
               </div>
             </CardContent>
             <CardFooter className="px-3 pb-3 flex flex-col gap-2">
-              <Button type="submit" className="w-full" disabled={isGenerating || (!prompt && !youtubeUrl)}>
+              <Button type="submit" className="w-full liquid-glass-button" disabled={isGenerating || (!prompt && !youtubeUrl)}>
                 {isGenerating ? 'Generowanie...' : 'Generuj melodię'}
               </Button>
               <Button 

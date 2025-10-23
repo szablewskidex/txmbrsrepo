@@ -11,17 +11,18 @@
  * 7. ✅ Eksport tylko najlepszych wzorców (NOWE!)
  */
 
-import { Midi } from '@tonejs/midi';
+import pkg from '@tonejs/midi';
+const { Midi } = pkg;
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const MIN_NOTES_PER_PATTERN = 8;
-const MAX_BEATS_PER_PATTERN = 64;
-const MAX_MEASURES = 16;
-const MIN_KEY_CONFIDENCE = 0.5;
+const MIN_NOTES_PER_PATTERN = 4;  // Zmniejszone z 8
+const MAX_BEATS_PER_PATTERN = 32;  // Zmniejszone z 64
+const MAX_MEASURES = 8;
+const MIN_KEY_CONFIDENCE = 0.25;  // Jeszcze bardziej permisywne dla dobrych melodii
 const MAX_EXPORTED_PATTERNS = 100;
-const SIMILARITY_THRESHOLD = 0.85;
+const SIMILARITY_THRESHOLD = 0.75;  // Zmniejszone z 0.85
 
 interface TrainingNote {
   note: string;
@@ -215,6 +216,131 @@ function validateAgainstSchema(example: TrainingExample): { valid: boolean; erro
   return { valid: errors.length === 0, errors };
 }
 
+function exportStatistics(
+  validExamples: TrainingExample[],
+  collectedPatterns: MelodyPattern[],
+  uniquePatterns: MelodyPattern[],
+  bestPatterns: MelodyPattern[],
+  midiFiles: string[],
+  outputDir: string
+) {
+  const avgMetrics = validExamples.reduce(
+    (acc, ex) => ({
+      avgInterval: acc.avgInterval + ex.metadata.metrics.avgInterval,
+      melodicRange: acc.melodicRange + ex.metadata.metrics.melodicRange,
+      rhythmicVariety: acc.rhythmicVariety + ex.metadata.metrics.rhythmicVariety,
+      notesDensity: acc.notesDensity + ex.metadata.metrics.notesDensity,
+    }),
+    { avgInterval: 0, melodicRange: 0, rhythmicVariety: 0, notesDensity: 0 }
+  );
+
+  const count = validExamples.length;
+  const styleStats = validExamples.reduce((acc, ex) => {
+    acc[ex.metadata.style] = (acc[ex.metadata.style] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const instrumentStats = validExamples.reduce((acc, ex) => {
+    const inst = ex.metadata.instrument || 'unknown';
+    acc[inst] = (acc[inst] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const keyStats = validExamples.reduce((acc, ex) => {
+    acc[ex.input.key] = (acc[ex.input.key] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const tempoRanges = {
+    slow: validExamples.filter(ex => ex.input.tempo < 90).length,
+    medium: validExamples.filter(ex => ex.input.tempo >= 90 && ex.input.tempo <= 140).length,
+    fast: validExamples.filter(ex => ex.input.tempo > 140).length,
+  };
+
+  const statistics = {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalMidiFiles: midiFiles.length,
+      totalPatternsFound: collectedPatterns.length,
+      uniquePatterns: uniquePatterns.length,
+      highQualityPatterns: bestPatterns.length,
+      validTrainingExamples: validExamples.length,
+      duplicatesRemoved: collectedPatterns.length - uniquePatterns.length,
+      lowQualityFiltered: uniquePatterns.length - bestPatterns.length,
+    },
+    averageMetrics:
+      count > 0
+        ? {
+            avgInterval: Number((avgMetrics.avgInterval / count).toFixed(2)),
+            melodicRange: Number((avgMetrics.melodicRange / count).toFixed(2)),
+            rhythmicVariety: Number(((avgMetrics.rhythmicVariety / count) * 100).toFixed(1)),
+            notesDensity: Number((avgMetrics.notesDensity / count).toFixed(1)),
+          }
+        : null,
+    distributions: {
+      styles: styleStats,
+      instruments: instrumentStats,
+      keys: keyStats,
+      tempoRanges,
+    },
+    qualityThresholds: {
+      MIN_NOTES_PER_PATTERN,
+      MAX_BEATS_PER_PATTERN,
+      MIN_KEY_CONFIDENCE,
+      SIMILARITY_THRESHOLD,
+    },
+  };
+
+  const statsFile = path.join(outputDir, 'training-statistics.json');
+  fs.writeFileSync(statsFile, JSON.stringify(statistics, null, 2));
+  console.log(`\n📊 Statystyki zapisane: ${statsFile}`);
+  return statistics;
+}
+
+function isProgrammaticMidi(notes: TrainingNote[]): boolean {
+  if (notes.length < 5) return false;
+
+  let programmaticScore = 0;
+
+  // 1. Wszystkie velocity identyczne? (BARDZO podejrzane)
+  const velocities = new Set(notes.map(n => n.velocity));
+  if (velocities.size === 1) {
+    programmaticScore += 3; // Silny wskaźnik
+  }
+
+  // 2. Bardzo mała wariancja velocity (< 1)?
+  const velocityValues = notes.map(n => n.velocity);
+  const avgVelocity = velocityValues.reduce((a, b) => a + b, 0) / velocityValues.length;
+  const variance = velocityValues.reduce((sum, v) => sum + Math.pow(v - avgVelocity, 2), 0) / velocityValues.length;
+  if (variance < 1) {
+    programmaticScore += 2; // Zmniejszony próg z 5 na 1
+  }
+
+  // 3. Idealne quantization (wszystkie nuty na siatce 0.25)?
+  const hasNonQuantized = notes.some(n => {
+    const startRemainder = n.start % 0.25;
+    return startRemainder > 0.01 && startRemainder < 0.24;
+  });
+  if (!hasNonQuantized && notes.length > 20) { // Zwiększony próg z 10 na 20
+    programmaticScore += 2;
+  }
+
+  // 4. Wszystkie duration identyczne?
+  const durations = new Set(notes.map(n => Number(n.duration.toFixed(2))));
+  if (durations.size === 1 && notes.length > 25) { // Zwiększony próg z 15 na 25
+    programmaticScore += 2;
+  }
+
+  // 5. NOWE: Sprawdź czy to rzeczywiście mechaniczne
+  // Jeśli ma więcej niż 2 velocity i dobre groove, prawdopodobnie OK
+  if (velocities.size > 2 && hasNonQuantized) {
+    programmaticScore = Math.max(0, programmaticScore - 2); // Bonus za różnorodność
+  }
+
+  // Zwróć true tylko jeśli score >= 4 (bardzo podejrzane)
+  return programmaticScore >= 4;
+}
+
 function detectKey(notes: TrainingNote[]): { key: string; confidence: number } {
   if (notes.length === 0) {
     return { key: 'C major', confidence: 0 };
@@ -345,6 +471,10 @@ async function parseMidiFile(filePath: string): Promise<MelodyPattern[]> {
   const patterns: MelodyPattern[] = [];
   const tempo = midi.header.tempos[0]?.bpm || 120;
   const ppq = midi.header.ppq;
+  
+  // NOWE: Odczytaj key signature z MIDI
+  const midiKeySignature = midi.header.keySignatures?.[0];
+  const midiKey = midiKeySignature ? `${midiKeySignature.key} ${midiKeySignature.scale}` : null;
 
   midi.tracks.forEach(track => {
     if (track.notes.length === 0) return;
@@ -358,18 +488,30 @@ async function parseMidiFile(filePath: string): Promise<MelodyPattern[]> {
 
     const instrument = detectInstrument(trackName);
 
-    const notes: TrainingNote[] = track.notes.map(note => ({
-      note: midiNumberToNoteName(note.midi),
-      start: note.ticks / ppq,
-      duration: note.durationTicks / ppq,
-      velocity: Math.round(note.velocity * 127),
-      pitch: note.midi,
-    }));
+    const notes: TrainingNote[] = track.notes.map(note => {
+      // NOWE: Normalizuj velocity do zakresu 40-100
+      const rawVelocity = Math.round(note.velocity * 127);
+      const normalizedVelocity = Math.max(40, Math.min(100, rawVelocity));
+      
+      return {
+        note: midiNumberToNoteName(note.midi),
+        start: note.ticks / ppq,
+        duration: note.durationTicks / ppq,
+        velocity: normalizedVelocity, // <-- ZMIANA
+        pitch: note.midi,
+      };
+    });
 
     const filteredNotes = notes.filter(n => n.start < MAX_BEATS_PER_PATTERN);
 
     if (filteredNotes.length < MIN_NOTES_PER_PATTERN) {
       console.log(`   ⊘ Za mało nut w ścieżce ${trackName}: ${filteredNotes.length}`);
+      return;
+    }
+
+    // NOWE: Sprawdź czy to programmatyczne MIDI
+    if (isProgrammaticMidi(filteredNotes)) {
+      console.log(`   ⊘ MIDI programmatyczne (brak groove): ${trackName}`);
       return;
     }
 
@@ -423,10 +565,10 @@ function extractBestPatterns(patterns: MelodyPattern[]): MelodyPattern[] {
       metrics: analyzePattern(pattern),
     }))
     .filter(({ metrics, pattern }) => {
-      if (metrics.avgInterval < 2 || metrics.avgInterval > 7) return false;
-      if (metrics.melodicRange < 12 || metrics.melodicRange > 36) return false;
-      if (metrics.rhythmicVariety < 0.25) return false;
-      if (metrics.notesDensity < 3 || metrics.notesDensity > 25) return false;
+      if (metrics.avgInterval < 1 || metrics.avgInterval > 12) return false;  // Bardziej permisywne
+      if (metrics.melodicRange < 6 || metrics.melodicRange > 48) return false;  // Szerszy zakres
+      if (metrics.rhythmicVariety < 0.1) return false;  // Mniej restrykcyjne
+      if (metrics.notesDensity < 1 || metrics.notesDensity > 40) return false;  // Szerszy zakres
       if (pattern.notes.length < MIN_NOTES_PER_PATTERN || pattern.notes.length > 200) return false;
       return true;
     })
@@ -588,6 +730,17 @@ async function trainFromMidiFiles() {
   console.log(`\n⭐ Wybieranie najlepszych wzorców...`);
   const bestPatterns = extractBestPatterns(uniquePatterns);
   console.log(`   ✓ Wysokiej jakości: ${bestPatterns.length}`);
+  
+  // NOWE: Debug dla The Anomaly
+  const anomalyPattern = uniquePatterns.find(p => p.trackName?.includes('Anomaly'));
+  if (anomalyPattern) {
+    const isInBest = bestPatterns.some(p => p.trackName?.includes('Anomaly'));
+    console.log(`   🔍 The Anomaly in bestPatterns: ${isInBest}`);
+    if (!isInBest) {
+      const metrics = analyzePattern(anomalyPattern);
+      console.log(`   🔍 Anomaly metrics:`, metrics);
+    }
+  }
 
   const trainingExamples = bestPatterns.flatMap(pattern => generateTrainingExamples([pattern], pattern.trackName || 'unknown'));
 
@@ -601,7 +754,12 @@ async function trainFromMidiFiles() {
       validExamples.push(example);
     } else {
       invalidCount++;
-      console.log(`   ✗ Nieprawidłowy przykład: ${validation.errors.join(', ')}`);
+      // NOWE: Debug dla The Anomaly
+      if (example.metadata?.source?.includes('Anomaly')) {
+        console.log(`   🔍 THE ANOMALY VALIDATION FAILED: ${validation.errors.join(', ')}`);
+      } else {
+        console.log(`   ✗ Nieprawidłowy przykład: ${validation.errors.join(', ')}`);
+      }
     }
   }
 
@@ -647,8 +805,11 @@ async function trainFromMidiFiles() {
     console.log(`   • Gęstość nut: ${(avgMetrics.notesDensity / count).toFixed(1)} notes/bar`);
   }
 
+  // Export detailed statistics
+  const stats = exportStatistics(validExamples, collectedPatterns, uniquePatterns, bestPatterns, midiFiles, outputDir);
+  
   console.log(`\n🎉 Trening zakończony!`);
-  console.log(`\n💡 Następny krok: Użyj tego datasetu do fine-tuningu modelu AI`);
+  console.log(`\n💡 Dataset gotowy do użycia w few-shot learning`);
 }
 
 trainFromMidiFiles().catch(console.error);

@@ -20,11 +20,14 @@ export function PianoKeys({ verticalZoom, rowHeight }: PianoKeysProps) {
           <div
             key={key}
             className={cn(
-              'flex items-center justify-end pr-2 text-xs border-b',
-              isBlackKey ? 'bg-gray-800 text-white' : 'bg-gray-200 text-black',
+              'flex items-center justify-end pr-2 text-xs border-b border-border',
+              isBlackKey 
+                ? 'bg-[#2a2a2a] text-gray-300 shadow-sm' 
+                : 'bg-white text-gray-900 shadow-sm',
             )}
             style={{
               height: rowHeight * verticalZoom,
+              borderLeft: isBlackKey ? '4px solid #3a3a3a' : '4px solid #d0d0d0',
             }}
           >
             {key}

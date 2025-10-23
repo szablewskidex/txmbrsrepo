@@ -129,6 +129,7 @@ export function validateAndCorrectMelody(
     removeDuplicates?: boolean;
     ensureMinNotes?: number;
     allowChromatic?: boolean;
+    validateMode?: 'strict' | 'preserve'; // NOWE!
   } = {}
 ): MelodyNote[] {
   const {
@@ -140,6 +141,7 @@ export function validateAndCorrectMelody(
     removeDuplicates = true,
     ensureMinNotes = 0,
     allowChromatic = false,
+    validateMode = 'preserve', // Domyślnie zachowawczy
   } = options;
 
   // POPRAWKA 1: Lepsze sprawdzenie pustej tablicy
@@ -207,8 +209,8 @@ export function validateAndCorrectMelody(
     return [];
   }
 
-  // 3. Quantize timing
-  if (quantizeGrid > 0) {
+  // 3. Quantize timing - ALE tylko jeśli validateMode === 'strict'
+  if (validateMode === 'strict' && quantizeGrid > 0) {
     processedNotes = processedNotes
       .map(note => ({
         ...note,
@@ -227,18 +229,26 @@ export function validateAndCorrectMelody(
         };
       })
       .filter(note => note.duration > 0);
+  } else if (validateMode === 'preserve' && quantizeGrid > 0) {
+    // Subtle quantize - tylko zaokrąglij do najbliższego 0.01
+    processedNotes = processedNotes.map(note => ({
+      ...note,
+      start: Math.round(note.start * 100) / 100,
+      duration: Math.max(0.01, Math.round(note.duration * 100) / 100),
+    }));
   }
 
-  // 4. Korekcja do skali
-  if (correctToScale) {
+  // 4. Korekcja do skali - OPCJONALNA w preserve mode
+  if (correctToScale && validateMode === 'strict') {
     processedNotes = processedNotes.map(note => ({
       ...note,
       note: snapToScale(note.note, key, scaleType),
     }));
   }
+  // W preserve mode: nie poprawiaj nut!
 
-  // 5. Ogranicz duże skoki melodyczne
-  if (maxInterval > 0 && processedNotes.length > 1) {
+  // 5. Ogranicz duże skoki - TYLKO w strict mode
+  if (maxInterval > 0 && processedNotes.length > 1 && validateMode === 'strict') {
     for (let i = 1; i < processedNotes.length; i++) {
       const prevMidi = noteToMidi(processedNotes[i - 1].note);
       let currMidi = noteToMidi(processedNotes[i].note);
@@ -270,45 +280,36 @@ export function validateAndCorrectMelody(
     processedNotes = uniqueNotes;
   }
 
-  // 7. POPRAWKA 3: Zapewnij minimalną liczbę nut (bardziej inteligentnie)
+  // 7. Zapewnij minimalną liczbę nut - TYLKO jeśli rzeczywiście za mało
   if (ensureMinNotes > 0 && processedNotes.length > 0 && processedNotes.length < ensureMinNotes) {
-    // POPRAWKA: Użyj processedNotes (po walidacji) zamiast originalNotes (przed walidacją)
-    const validatedNotes = [...processedNotes];
-    let attempts = 0;
-    const maxAttempts = ensureMinNotes * 2; // Zapobiegnij nieskończonej pętli
+    console.warn(`[VALIDATOR] Too few notes: ${processedNotes.length}/${ensureMinNotes}`);
+    
+    // W preserve mode: NIE dodawaj sztucznych nut
+    if (validateMode === 'preserve') {
+      console.warn('[VALIDATOR] Preserve mode: not adding artificial notes');
+    } else {
+      // Tylko w strict mode: próbuj dodać
+      const validatedNotes = [...processedNotes];
+      let attempts = 0;
+      const maxAttempts = ensureMinNotes * 2;
 
-    while (processedNotes.length < ensureMinNotes && attempts < maxAttempts) {
-      attempts++;
-      const noteToCopy = validatedNotes[processedNotes.length % validatedNotes.length];
-      const lastNote = processedNotes[processedNotes.length - 1];
-      const newStart = lastNote.start + lastNote.duration;
+      while (processedNotes.length < ensureMinNotes && attempts < maxAttempts) {
+        attempts++;
+        const noteToCopy = validatedNotes[processedNotes.length % validatedNotes.length];
+        const lastNote = processedNotes[processedNotes.length - 1];
+        const newStart = lastNote.start + lastNote.duration;
 
-      if (newStart + noteToCopy.duration <= maxDuration) {
-        // Dodaj małą wariację do velocity dla różnorodności
-        const velocityVariation = Math.floor((Math.random() - 0.5) * 10);
-        processedNotes.push({
-          ...noteToCopy,
-          start: newStart,
-          velocity: Math.max(1, Math.min(127, noteToCopy.velocity + velocityVariation)),
-        });
-      } else {
-        // Jeśli nie mieści się, spróbuj krótszą nutę
-        const shortenedDuration = Math.min(noteToCopy.duration, maxDuration - newStart);
-        if (shortenedDuration >= quantizeGrid) {
+        if (newStart + noteToCopy.duration <= maxDuration) {
+          const velocityVariation = Math.floor((Math.random() - 0.5) * 10);
           processedNotes.push({
             ...noteToCopy,
             start: newStart,
-            duration: shortenedDuration,
+            velocity: Math.max(1, Math.min(127, noteToCopy.velocity + velocityVariation)),
           });
         } else {
-          // Nie ma już miejsca
           break;
         }
       }
-    }
-
-    if (attempts >= maxAttempts) {
-      console.warn('[VALIDATOR] Could not add enough notes to reach minimum');
     }
   }
 
@@ -331,7 +332,8 @@ export function validateAndCorrectMelody(
   // 10. Ostateczne sortowanie
   processedNotes.sort((a, b) => a.start - b.start);
 
-  console.log(`[VALIDATOR] Validated: ${validNotes.length} -> ${processedNotes.length} notes`);
+  const percentLost = validNotes.length > 0 ? Math.round((1 - processedNotes.length / validNotes.length) * 100) : 0;
+  console.log(`[VALIDATOR] Mode: ${validateMode}, ${validNotes.length} -> ${processedNotes.length} (${percentLost}% lost)`);
   return processedNotes;
 }
 

@@ -23,7 +23,7 @@ export function EventEditor({ notes, selectedNoteId, onUpdateNote, cellPx, isCol
   
   return (
     <div className={cn(
-      'bg-card border-t shrink-0 flex flex-col transition-[height] duration-200 ease-out overflow-hidden select-none',
+      'bg-card border-t shrink-0 flex flex-col transition-[height] duration-200 ease-out overflow-hidden select-none event-editor-panel',
       isCollapsed ? 'h-12 md:h-28' : 'h-16 sm:h-28 md:h-28'
     )}>
       <div className="flex items-center justify-between px-2 py-1 md:hidden">

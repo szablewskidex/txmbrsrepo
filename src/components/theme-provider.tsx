@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-export type ThemeName = 'standard' | 'dark' | 'light';
+export type ThemeName = 'standard' | 'dark' | 'light' | 'liquid-glass';
 
 interface ThemeContextValue {
   theme: ThemeName;
@@ -12,15 +12,15 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'pianorollai-theme';
-const ORDER: ThemeName[] = ['standard', 'dark', 'light'];
+const ORDER: ThemeName[] = ['standard', 'dark', 'light', 'liquid-glass'];
 
 function applyTheme(theme: ThemeName) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  root.classList.remove('theme-standard', 'theme-dark', 'theme-light', 'dark');
+  root.classList.remove('theme-standard', 'theme-dark', 'theme-light', 'theme-liquid-glass', 'dark');
   root.classList.add(`theme-${theme}`);
   root.dataset.theme = theme;
-  if (theme === 'dark') {
+  if (theme === 'dark' || theme === 'liquid-glass') {
     root.classList.add('dark');
     root.style.colorScheme = 'dark';
   } else {
@@ -35,7 +35,7 @@ function detectInitialTheme(): ThemeName {
   }
 
   const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored === 'standard' || stored === 'dark' || stored === 'light') {
+  if (stored === 'standard' || stored === 'dark' || stored === 'light' || stored === 'liquid-glass') {
     return stored;
   }
 

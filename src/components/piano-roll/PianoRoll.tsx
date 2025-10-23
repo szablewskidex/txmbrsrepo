@@ -73,6 +73,8 @@ export function PianoRoll({
 }: PianoRollProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [ghostNotes, setGhostNotes] = useState<GhostNote[]>([]);
+  const [previousNotes, setPreviousNotes] = useState<Note[]>([]);
+  const [showGhostNotes, setShowGhostNotes] = useState(false);
   const [measures, setMeasures] = useState(DEFAULT_MEASURES);
   const [cellPx, setCellPx] = useState(DEFAULT_CELL_PX);
   const [verticalZoom, setVerticalZoom] = useState(1);
@@ -90,6 +92,7 @@ export function PianoRoll({
   const [selectedMidiExample, setSelectedMidiExample] = useState<string>('');
   const [lastPrompt, setLastPrompt] = useState<string>('melody');
   const [gridResolution, setGridResolution] = useState(DEFAULT_GRID_RESOLUTION);
+  const [snapToGrid, setSnapToGrid] = useState(false);
   const [lastKey, setLastKey] = useState('');
   const [lastChordProgression, setLastChordProgression] = useState<string | undefined>(undefined);
   const [lastIntensifyDarkness, setLastIntensifyDarkness] = useState(false);
@@ -438,6 +441,14 @@ export function PianoRoll({
         .filter((n): n is Note => n !== null);
 
       if (clampedNotes.length > 0) {
+        // Zapisz poprzednie nuty przed ustawieniem nowych
+        if (notes.length > 0) {
+          setPreviousNotes([...notes]);
+          // Automatycznie wyłącz ghost notes gdy generowana jest nowa melodia
+          setShowGhostNotes(false);
+          setGhostNotes([]);
+        }
+        
         setNotes(clampedNotes);
         const maxId = Math.max(...clampedNotes.map(n => n.id));
         nextId.current = maxId + 1;
@@ -447,6 +458,7 @@ export function PianoRoll({
           bassline: newBassline.length,
           total: clampedNotes.length,
           measures: Math.ceil(Math.max(...clampedNotes.map(n => n.start + n.duration)) / 4),
+          previousNotesSaved: notes.length,
         });
       } else {
         console.warn('[PIANO_ROLL] No valid notes after clamping');
@@ -621,7 +633,7 @@ export function PianoRoll({
     const id = nextId.current++;
     const newNote: Note = {
       id,
-      start: Math.floor(start),
+      start,
       pitch,
       duration: 1,
       velocity: 100,
@@ -852,22 +864,110 @@ export function PianoRoll({
     return { blob, fileName };
   };
 
-  const exportMidi = () => {
+  const exportMidi = async () => {
     const file = buildMidiFile();
     if (!file) {
       toast({ variant: 'destructive', title: 'Brak nut', description: 'Nie ma czego eksportować do MIDI.' });
       return;
     }
 
-    const url = URL.createObjectURL(file.blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast({ title: 'MIDI Eksportowane', description: 'Twoja kompozycja została pobrana.' });
+    // Check if running in Electron
+    if (typeof window !== 'undefined' && (window as any).electron?.isElectron) {
+      try {
+        // Convert blob to base64 for Electron
+        const arrayBuffer = await file.blob.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        
+        const result = await (window as any).electron.saveMidiFile(file.fileName, base64);
+        
+        if (result.success) {
+          toast({ 
+            title: 'MIDI Zapisane', 
+            description: `Plik zapisany: ${result.filePath}` 
+          });
+        } else if (!result.canceled) {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('Electron save error:', error);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Błąd zapisu', 
+          description: 'Nie udało się zapisać pliku MIDI.' 
+        });
+      }
+    } else {
+      // Browser fallback
+      const url = URL.createObjectURL(file.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: 'MIDI Eksportowane', description: 'Twoja kompozycja została pobrana.' });
+    }
+  };
+
+  const handleDragMidiStart = async (event: React.DragEvent<HTMLButtonElement>) => {
+    const file = buildMidiFile();
+    if (!file) {
+      event.preventDefault();
+      toast({ variant: 'destructive', title: 'Brak nut', description: 'Nie ma czego przeciągnąć.' });
+      return;
+    }
+
+    try {
+      // Konwertuj blob na data URL (działa lepiej z aplikacjami desktopowymi)
+      const reader = new FileReader();
+      
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        
+        // Ustaw dane dla drag and drop
+        event.dataTransfer.effectAllowed = 'copy';
+        
+        // Format DownloadURL z data URL
+        event.dataTransfer.setData('DownloadURL', `audio/midi:${file.fileName}:${dataUrl}`);
+        event.dataTransfer.setData('text/uri-list', dataUrl);
+        event.dataTransfer.setData('text/plain', dataUrl);
+      };
+      
+      reader.readAsDataURL(file.blob);
+      
+      // Dodaj plik bezpośrednio (najlepsza metoda dla DAW)
+      const fileObj = new File([file.blob], file.fileName, { type: 'audio/midi' });
+      event.dataTransfer.items.add(fileObj);
+      event.dataTransfer.effectAllowed = 'copy';
+      
+      toast({ 
+        title: 'Przeciąganie MIDI', 
+        description: `Przeciągnij do FL Studio lub pobierz klikając "Download"` 
+      });
+      
+      console.log('[DRAG] Started dragging MIDI file:', file.fileName);
+    } catch (e) {
+      console.error('[DRAG] Error:', e);
+      toast({
+        variant: 'destructive',
+        title: 'Błąd przeciągania',
+        description: 'Użyj przycisku "Download" aby pobrać plik MIDI.'
+      });
+    }
+  };
+
+  const handleDragMidiEnd = () => {
+    // Wyczyść URL po zakończeniu przeciągania
+    if (dragUrlRef.current) {
+      setTimeout(() => {
+        if (dragUrlRef.current) {
+          URL.revokeObjectURL(dragUrlRef.current);
+          dragUrlRef.current = null;
+        }
+      }, 100);
+    }
+    console.log('[DRAG] Drag ended');
   };
 
   const exportJson = () => {
@@ -890,61 +990,26 @@ export function PianoRoll({
     );
   };
 
-  const handleDragMidiStart = async (event: React.DragEvent<HTMLButtonElement>) => {
-    const file = buildMidiFile();
-    if (!file) {
-      event.preventDefault();
-      toast({ variant: 'destructive', title: 'Brak nut', description: 'Nie ma czego przeciągnąć.' });
-      return;
-    }
-
-    if (event.dataTransfer) {
-      try {
-        const midiFile = new File([file.blob], file.fileName, {
-          type: 'audio/midi',
-          lastModified: Date.now(),
-        });
-
-        if (event.dataTransfer.items && event.dataTransfer.items.add) {
-          event.dataTransfer.items.add(midiFile);
-          event.dataTransfer.effectAllowed = 'copy';
-
-          const arrayBuffer = await file.blob.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          const binaryString = uint8Array.reduce((data, byte) => data + String.fromCharCode(byte), '');
-          const base64 = btoa(binaryString);
-
-          event.dataTransfer.setData('DownloadURL', `audio/midi:${file.fileName}:data:audio/midi;base64,${base64}`);
-        } else {
-          const url = URL.createObjectURL(file.blob);
-          dragUrlRef.current = url;
-          event.dataTransfer.effectAllowed = 'copy';
-          event.dataTransfer.setData('DownloadURL', `audio/midi:${file.fileName}:${url}`);
-        }
-      } catch (error) {
-        console.error('[MIDI_DRAG] Error setting up drag data:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Błąd przeciągania',
-          description: 'Nie udało się przygotować pliku do przeciągnięcia.',
-        });
-        event.preventDefault();
-      }
-    }
-  };
-
-  const handleDragMidiEnd = () => {
-    dragUrlRef.current = null;
-  };
-
-  const toggleGhostExample = () => {
-    if (ghostNotes.length > 0) {
+  const toggleGhostNotes = () => {
+    if (showGhostNotes) {
+      // Wyłącz ghost notes
+      setShowGhostNotes(false);
       setGhostNotes([]);
+    } else if (previousNotes.length > 0) {
+      // Włącz ghost notes z poprzedniej melodii
+      setShowGhostNotes(true);
+      const ghosts: GhostNote[] = previousNotes.map(note => ({
+        start: note.start,
+        pitch: note.pitch,
+        duration: note.duration,
+      }));
+      setGhostNotes(ghosts);
     } else {
-      setGhostNotes([
-        { start: 2, pitch: noteToIndex('E4'), duration: 1 },
-        { start: 6, pitch: noteToIndex('G4'), duration: 1 },
-      ]);
+      // Brak poprzedniej melodii
+      toast({
+        title: 'Brak poprzedniej melodii',
+        description: 'Wygeneruj nową melodię, aby zobaczyć poprzednią jako duchy.',
+      });
     }
   };
 
@@ -1239,6 +1304,8 @@ export function PianoRoll({
       bpm={bpm}
       gridResolution={gridResolution}
       setGridResolution={setGridResolution}
+      snapToGrid={snapToGrid}
+      setSnapToGrid={setSnapToGrid}
     />
   );
 
@@ -1277,7 +1344,7 @@ export function PianoRoll({
         onDragMidiStart={handleDragMidiStart}
         onDragMidiEnd={handleDragMidiEnd}
         onExportJson={exportJson}
-        onToggleGhost={toggleGhostExample}
+        onToggleGhost={toggleGhostNotes}
         bpm={bpm}
         onBpmChange={setBpm}
         volume={volume}
@@ -1308,6 +1375,7 @@ export function PianoRoll({
             <div
               ref={gridViewportRef}
               className="flex-1 overflow-auto min-h-0 min-w-0 scrollbar-hide"
+
               onScroll={handleGridScroll}
             >
               <div
@@ -1328,6 +1396,8 @@ export function PianoRoll({
                   getNote={getNote}
                   onSelectionChange={handleSelectionChange}
                   gridResolution={gridResolution}
+                  snapToGrid={snapToGrid}
+                  snapToGrid={snapToGrid}
                 />
               </div>
             </div>

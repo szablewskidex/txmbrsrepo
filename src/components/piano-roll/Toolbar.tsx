@@ -2,7 +2,14 @@
 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Play, Pause, Download, Ghost, FileJson, Upload, Move, Sun, Moon, Monitor, Volume2, VolumeX, Guitar } from 'lucide-react';
+import { Play, Pause, Download, Ghost, FileJson, Upload, Move, Sun, Moon, Monitor, Volume2, VolumeX, Guitar, Menu } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import React from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -77,11 +84,11 @@ export function Toolbar({
   }, [theme]);
 
   return (
-    <header className="flex items-center h-12 px-3 bg-card border-b shrink-0 sm:h-14 sm:px-4">
+    <header className="flex items-center h-12 px-3 bg-card border-b shrink-0 sm:h-14 sm:px-4 liquid-glass-toolbar">
       <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">PianoRoll<span className="text-primary">AI</span></h1>
-      <Separator orientation="vertical" className="h-6 mx-3 sm:mx-4" />
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        <Button variant="ghost" size="icon" onClick={onPlayToggle}>
+      <Separator orientation="vertical" className="h-6 mx-2 sm:mx-4 hidden sm:block" />
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end sm:justify-start">
+        <Button variant="ghost" size="icon" className="liquid-glass-button" onClick={onPlayToggle}>
           {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
           <span className="sr-only">{isPlaying ? 'Pauza' : 'Odtwarzaj'}</span>
         </Button>
@@ -98,12 +105,12 @@ export function Toolbar({
                 inputMode="numeric"
             />
         </div>
-        <Separator orientation="vertical" className="h-6 mx-2" />
-        <Button variant="ghost" size="icon" onClick={cycleTheme} title={nextThemeLabel} aria-label={nextThemeLabel}>
+        <Separator orientation="vertical" className="h-6 mx-2 hidden sm:block" />
+        <Button variant="ghost" size="icon" className="liquid-glass-button hidden sm:flex" onClick={cycleTheme} title={nextThemeLabel} aria-label={nextThemeLabel}>
           {currentThemeIcon}
         </Button>
-        <Separator orientation="vertical" className="h-6 mx-2" />
-        <div className="hidden md:flex items-center gap-2 w-36">
+        <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+        <div className="hidden md:flex items-center gap-2 w-36 liquid-glass-slider">
           <VolumeX className="h-4 w-4 text-muted-foreground" />
           <Slider
             value={[volume]}
@@ -115,18 +122,19 @@ export function Toolbar({
           />
           <Volume2 className="h-4 w-4 text-muted-foreground" />
         </div>
-        <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
-        <Button variant="ghost" size="icon" onClick={onToggleGuitar} title={isGuitar ? 'Użyj dźwięku pianina' : 'Użyj dźwięku gitary'}>
+        <Separator orientation="vertical" className="h-6 mx-2 hidden lg:block" />
+        <Button variant="ghost" size="icon" className="liquid-glass-button hidden lg:flex" onClick={onToggleGuitar} title={isGuitar ? 'Użyj dźwięku pianina' : 'Użyj dźwięku gitary'}>
           <Guitar className={`h-5 w-5 ${isGuitar ? 'text-primary' : ''}`} />
         </Button>
         <Separator orientation="vertical" className="h-6 mx-2" />
-        <Button variant="ghost" size="icon" onClick={onImportMidiClick} title="Importuj MIDI">
+        <Button variant="ghost" size="icon" className="liquid-glass-button hidden sm:flex" onClick={onImportMidiClick} title="Importuj MIDI">
             <Upload className="h-5 w-5" />
             <span className="sr-only">Importuj MIDI</span>
         </Button>
         <Button
           variant="ghost"
           size="icon"
+          className="hidden sm:flex"
           title="Przeciągnij MIDI"
           draggable
           onDragStart={onDragMidiStart}
@@ -135,18 +143,56 @@ export function Toolbar({
           <Move className="h-5 w-5" />
           <span className="sr-only">Przeciągnij MIDI</span>
         </Button>
-        <Button variant="ghost" size="icon" onClick={onExportMidi} title="Eksportuj MIDI">
+        <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={onExportMidi} title="Eksportuj MIDI">
           <Download className="h-5 w-5" />
           <span className="sr-only">Eksportuj MIDI</span>
         </Button>
-        <Button variant="ghost" size="icon" onClick={onExportJson} title="Eksportuj JSON">
+        <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={onExportJson} title="Eksportuj JSON">
           <FileJson className="h-5 w-5" />
           <span className="sr-only">Eksportuj JSON</span>
         </Button>
-        <Button variant="ghost" size="icon" onClick={onToggleGhost}>
+        <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={onToggleGhost}>
           <Ghost className="h-5 w-5" />
           <span className="sr-only">Przełącz nuty-duchy</span>
         </Button>
+        
+        {/* Mobile dropdown menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="sm:hidden">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={cycleTheme}>
+              {currentThemeIcon}
+              <span className="ml-2">{nextThemeLabel}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onToggleGuitar}>
+              <Guitar className={`h-4 w-4 ${isGuitar ? 'text-primary' : ''}`} />
+              <span className="ml-2">{isGuitar ? 'Pianino' : 'Gitara'}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleGhost}>
+              <Ghost className="h-4 w-4" />
+              <span className="ml-2">Nuty-duchy</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onImportMidiClick}>
+              <Upload className="h-4 w-4" />
+              <span className="ml-2">Importuj MIDI</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onExportMidi}>
+              <Download className="h-4 w-4" />
+              <span className="ml-2">Eksportuj MIDI</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onExportJson}>
+              <FileJson className="h-4 w-4" />
+              <span className="ml-2">Eksportuj JSON</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

@@ -61,6 +61,92 @@ export default function Home() {
       return;
     }
 
+    // Aggressive fullscreen enforcement for iOS
+    const forceFullscreen = () => {
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        const elements = [
+          document.documentElement,
+          document.body,
+          document.getElementById('__next'),
+          document.querySelector('main')
+        ].filter(Boolean);
+
+        // Check if iPhone 13 mini
+        const isIPhone13Mini = window.screen.width === 375 && 
+                              window.screen.height === 812 && 
+                              window.devicePixelRatio === 3;
+
+        if (isIPhone13Mini) {
+          const isLandscape = window.orientation === 90 || window.orientation === -90;
+          const width = isLandscape ? '812px' : '375px';
+          const height = isLandscape ? '375px' : '812px';
+          
+          elements.forEach(el => {
+            if (el) {
+              const element = el as HTMLElement;
+              element.style.width = width;
+              element.style.height = height;
+              element.style.maxWidth = width;
+              element.style.maxHeight = height;
+              element.style.minWidth = width;
+              element.style.minHeight = height;
+              element.style.margin = '0';
+              element.style.padding = '0';
+              element.style.position = 'fixed';
+              element.style.top = '0';
+              element.style.left = '0';
+              element.style.overflow = 'hidden';
+            }
+          });
+        } else {
+          // General iOS handling
+          elements.forEach(el => {
+            if (el) {
+              const element = el as HTMLElement;
+              element.style.width = '100vw';
+              element.style.height = '100vh';
+              element.style.maxWidth = '100vw';
+              element.style.maxHeight = '100vh';
+              element.style.margin = '0';
+              element.style.padding = '0';
+              element.style.position = 'fixed';
+              element.style.top = '0';
+              element.style.left = '0';
+              element.style.right = '0';
+              element.style.bottom = '0';
+              element.style.overflow = 'hidden';
+            }
+          });
+        }
+
+        // Force viewport meta tag update
+        let viewport = document.querySelector('meta[name=viewport]') as HTMLMetaElement;
+        if (viewport) {
+          viewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, shrink-to-fit=no';
+        }
+
+        // Force liquid glass background on mobile
+        forceLiquidGlass();
+      }
+    };
+
+    // Force liquid glass background immediately
+    const forceLiquidGlass = () => {
+      const gradient = 'linear-gradient(135deg, rgba(8, 8, 10, 1) 0%, rgba(10, 10, 12, 1) 25%, rgba(12, 12, 15, 1) 50%, rgba(10, 10, 12, 1) 75%, rgba(8, 8, 10, 1) 100%)';
+      document.documentElement.style.background = gradient;
+      document.body.style.background = gradient;
+      const main = document.querySelector('main');
+      if (main) (main as HTMLElement).style.background = gradient;
+      const next = document.getElementById('__next');
+      if (next) next.style.background = gradient;
+    };
+
+    // Run immediately and on various events
+    forceLiquidGlass();
+    forceFullscreen();
+    setTimeout(() => { forceLiquidGlass(); forceFullscreen(); }, 100);
+    setTimeout(() => { forceLiquidGlass(); forceFullscreen(); }, 500);
+
     const mediaQuery = window.matchMedia('(display-mode: standalone)');
     const mobileWidthQuery = window.matchMedia('(max-width: 768px)');
 
@@ -92,7 +178,18 @@ export default function Home() {
     };
 
     const setViewportHeight = () => {
-      document.documentElement.style.setProperty('--app-vh', `${window.innerHeight * 0.01}px`);
+      const vh = window.innerHeight * 0.01;
+      const vw = window.innerWidth * 0.01;
+      document.documentElement.style.setProperty('--app-vh', `${vh}px`);
+      document.documentElement.style.setProperty('--app-vw', `${vw}px`);
+      
+      // Force full dimensions on iOS
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        document.documentElement.style.width = '100vw';
+        document.documentElement.style.height = '100vh';
+        document.body.style.width = '100vw';
+        document.body.style.height = '100vh';
+      }
     };
 
     detectMobile();
@@ -101,11 +198,21 @@ export default function Home() {
     mediaQuery.addEventListener('change', checkStandalone);
     mobileWidthQuery.addEventListener('change', detectMobile);
     window.addEventListener('appinstalled', checkStandalone);
-    window.addEventListener('resize', setViewportHeight);
+    window.addEventListener('resize', () => {
+      setViewportHeight();
+      forceFullscreen();
+      forceLiquidGlass();
+    });
     const orientationHandler = () => {
-      setTimeout(setViewportHeight, 220);
+      setTimeout(() => {
+        setViewportHeight();
+        forceFullscreen();
+        forceLiquidGlass();
+      }, 220);
     };
     window.addEventListener('orientationchange', orientationHandler);
+    window.addEventListener('load', forceFullscreen);
+    window.addEventListener('focus', forceFullscreen);
 
     document.addEventListener('touchmove', preventGesture, { passive: false });
     const gestureHandler = (event: Event) => event.preventDefault();
@@ -118,8 +225,13 @@ export default function Home() {
       mediaQuery.removeEventListener('change', checkStandalone);
       mobileWidthQuery.removeEventListener('change', detectMobile);
       window.removeEventListener('appinstalled', checkStandalone);
-      window.removeEventListener('resize', setViewportHeight);
+      window.removeEventListener('resize', () => {
+        setViewportHeight();
+        forceFullscreen();
+      });
       window.removeEventListener('orientationchange', orientationHandler);
+      window.removeEventListener('load', forceFullscreen);
+      window.removeEventListener('focus', forceFullscreen);
       document.removeEventListener('touchmove', preventGesture);
       document.removeEventListener('gesturestart', gestureHandler);
       document.removeEventListener('touchend', preventDoubleTap);
@@ -316,7 +428,18 @@ export default function Home() {
   }
 
   return (
-    <main className="w-screen overflow-hidden" style={{ minHeight: 'calc(var(--app-vh, 1vh) * 100)' }}>
+    <main className="w-screen h-screen overflow-hidden" style={{ 
+      minHeight: 'calc(var(--app-vh, 1vh) * 100)',
+      minWidth: 'calc(var(--app-vw, 1vw) * 100)',
+      width: '100vw',
+      height: '100vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
+      position: 'relative',
+      margin: 0,
+      padding: 0,
+
+    }}>
       <PianoRoll
         melody={melody}
         setMelody={setMelody}

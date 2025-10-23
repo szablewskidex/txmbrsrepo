@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import type { Note, GhostNote } from '@/lib/types';
 import { PIANO_KEYS, ROW_HEIGHT } from '@/lib/constants';
 import { NoteItem } from './NoteItem';
@@ -19,6 +19,7 @@ interface GridProps {
   getNote: (id: number) => Note | undefined;
   onSelectionChange: (ids: number[], activeId?: number | null) => void;
   gridResolution: number;
+  snapToGrid: boolean;
 }
 
 type DragState = {
@@ -43,9 +44,17 @@ export function Grid({
   getNote,
   onSelectionChange,
   gridResolution,
+  snapToGrid,
 }: GridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const gridResolutionRef = useRef(gridResolution);
+  const snapToGridRef = useRef(snapToGrid);
+  
+  // Update refs when props change
+  gridResolutionRef.current = gridResolution;
+  snapToGridRef.current = snapToGrid;
+  
   const selectionStateRef = useRef({
     isSelecting: false,
     startX: 0,
@@ -56,6 +65,21 @@ export function Grid({
   });
   const [selectionBox, setSelectionBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const lastTapRef = useRef<number>(0);
+  const [isLiquidGlass, setIsLiquidGlass] = useState(false);
+
+  // Detect liquid glass theme
+  useEffect(() => {
+    const checkTheme = () => {
+      setIsLiquidGlass(document.documentElement.classList.contains('theme-liquid-glass'));
+    };
+    checkTheme();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    
+    return () => observer.disconnect();
+  }, []);
 
   const gridWidth = beats * cellPx;
   const gridHeight = PIANO_KEYS.length * ROW_HEIGHT * verticalZoom;
@@ -63,6 +87,19 @@ export function Grid({
   const majorGridSize = cellPx * beatsPerMeasure;
   const minorGridSize = cellPx;
   const subdivisionSize = cellPx * gridResolution;
+  
+  // Use brighter colors for liquid glass theme
+  const gridColors = isLiquidGlass ? {
+    major: 'rgba(255, 255, 255, 0.7)',
+    minor: 'rgba(255, 255, 255, 0.4)',
+    subdivision: 'rgba(255, 255, 255, 0.25)',
+    horizontal: 'rgba(255, 255, 255, 0.6)',
+  } : {
+    major: 'hsl(var(--border) / 0.8)',
+    minor: 'hsl(var(--border) / 0.5)',
+    subdivision: 'hsl(var(--border) / 0.2)',
+    horizontal: 'hsl(var(--border))',
+  };
 
   const handleMouseUp = useCallback(() => {
     if (dragRef.current) {
@@ -81,16 +118,27 @@ export function Grid({
     const gridCellHeight = ROW_HEIGHT * verticalZoom;
 
     if (type === 'move') {
-      const deltaBeats = Math.round(dx / cellPx);
+      const deltaBeats = dx / cellPx; // FIXED: No rounding for precise movement
       const deltaPitch = -Math.round(dy / gridCellHeight);
 
-      const newStart = Math.max(0, originalNote.start + deltaBeats);
+      const rawNewStart = Math.max(0, originalNote.start + deltaBeats);
+      const currentSnapToGrid = snapToGridRef.current;
+      const currentGridResolution = gridResolutionRef.current;
+      const newStart = currentSnapToGrid 
+        ? Math.max(0, Math.round(rawNewStart / currentGridResolution) * currentGridResolution)
+        : rawNewStart;
+      // Drag move processed
       const newPitch = Math.max(0, Math.min(PIANO_KEYS.length - 1, originalNote.pitch + deltaPitch));
 
       onUpdateNote(id, { start: newStart, pitch: newPitch });
     } else if (type === 'resize') {
       const deltaBeats = dx / cellPx;
-      const newDuration = Math.max(0.25, Math.round((originalNote.duration + deltaBeats) * 4) / 4);
+      const rawNewDuration = Math.max(0.01, originalNote.duration + deltaBeats);
+      const currentSnapToGrid = snapToGridRef.current;
+      const currentGridResolution = gridResolutionRef.current;
+      const newDuration = currentSnapToGrid 
+        ? Math.max(0.01, Math.round(rawNewDuration / currentGridResolution) * currentGridResolution)
+        : rawNewDuration;
       onUpdateNote(id, { duration: newDuration });
     }
   }, [cellPx, verticalZoom, onUpdateNote]);
@@ -110,6 +158,7 @@ export function Grid({
         return;
       }
       state.moved = true;
+      state.preventClick = true; // FIXED: Prevent click only when we start dragging
     }
 
     const rect = grid.getBoundingClientRect();
@@ -224,8 +273,15 @@ export function Grid({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const start = x / cellPx;
+    const rawStart = x / cellPx;
+    const currentSnapToGrid = snapToGridRef.current;
+    const currentGridResolution = gridResolutionRef.current;
+    const start = currentSnapToGrid 
+      ? Math.round(rawStart / currentGridResolution) * currentGridResolution 
+      : rawStart;
     const pitch = PIANO_KEYS.length - 1 - Math.floor(y / (ROW_HEIGHT * verticalZoom));
+
+    // Click processed successfully
 
     if (pitch >= 0 && pitch < PIANO_KEYS.length) {
       onAddNote(start, pitch);
@@ -241,7 +297,7 @@ export function Grid({
     state.startX = clientX;
     state.startY = clientY;
     state.moved = false;
-    state.preventClick = true;
+    state.preventClick = false; // FIXED: Don't prevent click until we actually move
     state.touchMode = false;
     setSelectionBox(null);
     onSelectionChange([]);
@@ -317,15 +373,15 @@ export function Grid({
   return (
     <div
       ref={gridRef}
-      className="absolute left-0 top-0 bg-background select-none"
+      className="absolute left-0 top-0 bg-background select-none piano-grid"
       style={{
         width: gridWidth,
         height: gridHeight,
         backgroundImage: `
-          linear-gradient(to right, hsl(var(--border) / 0.8) 2px, transparent 2px),
-          linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
-          linear-gradient(to right, hsl(var(--border) / 0.2) 1px, transparent 1px),
-          linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)
+          linear-gradient(to right, ${gridColors.major} 2px, transparent 2px),
+          linear-gradient(to right, ${gridColors.minor} 1px, transparent 1px),
+          linear-gradient(to right, ${gridColors.subdivision} 1px, transparent 1px),
+          linear-gradient(to bottom, ${gridColors.horizontal} 1px, transparent 1px)
         `,
         backgroundSize: `
           ${majorGridSize}px 100%,

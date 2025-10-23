@@ -1,5 +1,76 @@
 [
   {
+    "prompt": "minor pop",
+    "key": "D minor",
+    "measures": 8,
+    "tempo": 140,
+    "gridResolution": 0.25,
+    "chordProgression": "Dm-Edim-Am",
+    "intensifyDarkness": false,
+    "reason": "prompt_mismatch",
+    "signature": "3f21c1f207e29d119f3a48415b2325b0a14751e4",
+    "timestamp": "2025-10-23T11:11:30.920Z"
+  },
+  {
+    "prompt": "dark trap melody, 130bpm, minor",
+    "key": "C minor",
+    "measures": 8,
+    "tempo": 130,
+    "gridResolution": 0.25,
+    "chordProgression": "Cm-Fm-G7-Cm",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "2f47da99fb3094be03103bb7b6117e85873d0fe1",
+    "timestamp": "2025-10-23T10:52:48.830Z"
+  },
+  {
+    "prompt": "dark trap melody, 130bpm, minor",
+    "key": "C minor",
+    "measures": 8,
+    "tempo": 130,
+    "gridResolution": 0.25,
+    "chordProgression": "Cm-Ddim-G7",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "6d45b981ee05a1380c115a0f1eba9ca2919f74af",
+    "timestamp": "2025-10-23T10:50:14.003Z"
+  },
+  {
+    "prompt": "dark trap melody, complex chords, 130bpm",
+    "key": "G# minor",
+    "measures": 8,
+    "tempo": 130,
+    "gridResolution": 0.25,
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "923a488bf9ee4eafedd93a7b1f2199d399c29349",
+    "timestamp": "2025-10-23T04:09:12.993Z"
+  },
+  {
+    "prompt": "complex hiphop melody beat, complex chord progression",
+    "key": "C# minor",
+    "measures": 16,
+    "tempo": 160,
+    "gridResolution": 0.16666666666666666,
+    "chordProgression": "C#m-G#m",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "cb07fc294fedc0a2ca9112078e368891eebc8ba2",
+    "timestamp": "2025-10-22T21:28:30.682Z"
+  },
+  {
+    "prompt": "complex hiphop beat, 160bpm",
+    "key": "C# minor",
+    "measures": 16,
+    "tempo": 160,
+    "gridResolution": 0.25,
+    "chordProgression": "C#m-G#m",
+    "intensifyDarkness": true,
+    "reason": "prompt_mismatch",
+    "signature": "24895eb0a9bfea6652f7814ab0b4cf91bfcb489f",
+    "timestamp": "2025-10-22T21:06:21.633Z"
+  },
+  {
     "prompt": "dark minor complex beat",
     "key": "F minor",
     "measures": 8,
